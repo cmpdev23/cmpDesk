@@ -90,10 +90,7 @@ function Dossiers() {
 
             {/* Navigation buttons */}
             <div className="flex justify-between mt-6">
-              <Button
-                variant="outline"
-                disabled={currentStep === 1}
-              >
+              <Button variant="secondary" disabled={currentStep === 1}>
                 ← Précédent
               </Button>
 
