@@ -11,9 +11,8 @@
  */
 
 import { useState } from 'react';
-import { OpportunityFormStep1, DEFAULT_STEP1_DATA } from '@/modules/dossiers';
+import { OpportunityFormStep1, DEFAULT_STEP1_DATA, DossierPageHeader } from '@/modules/dossiers';
 import type { OpportunityStep1Data } from '@/modules/dossiers';
-import { Stepper } from '@/components/ui/stepper';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -38,22 +37,7 @@ function Dossiers() {
   return (
     <div className="flex flex-col h-full">
       {/* Page header */}
-      <div className="p-2 border-b border-border bg-background">
-        <div className="flex flex-col justify-between max-w-4xl gap-4 md:flex-row md:items-center">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Nouveau dossier</h1>
-          </div>
-
-          <Stepper
-            steps={[
-              { title: 'Informations générales' },
-              { title: 'Famille de produit' },
-              { title: 'Type de signature' },
-            ]}
-            currentStep={currentStep}
-          />
-        </div>
-      </div>
+      <DossierPageHeader currentStep={currentStep} />
 
       {/* Form content area - scrollable */}
       <div className="flex-1 overflow-auto">

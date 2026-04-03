@@ -11,6 +11,7 @@
 
 // Components
 export { OpportunityFormStep1 } from './components/OpportunityFormStep1';
+export { DossierPageHeader } from './components/DossierPageHeader';
 
 // Types
 export type {
