@@ -26,6 +26,8 @@ import type { EnvConfig } from "../types/electron";
 function AppLayout() {
   const location = useLocation();
   const [envConfig, setEnvConfig] = useState<EnvConfig | null>(null);
+  // true = dark mode, false = light mode
+  const [isDark, setIsDark] = useState<boolean>(true);
   
   // Load env config to conditionally show Logs menu
   useEffect(() => {
@@ -38,6 +40,25 @@ function AppLayout() {
       }
     };
     loadEnvConfig();
+  }, []);
+
+  // ── Theme: load initial value + subscribe to native menu changes ──────────
+  useEffect(() => {
+    // 1. Load initial theme from main process
+    window.electronAPI.theme?.getMode().then(({ shouldUseDarkColors }) => {
+      setIsDark(shouldUseDarkColors);
+    }).catch(() => {
+      // Fallback: keep default dark
+    });
+
+    // 2. Listen for theme changes triggered by the native "Vue" menu
+    const unsubscribe = window.electronAPI.theme?.onChange(({ shouldUseDarkColors }) => {
+      setIsDark(shouldUseDarkColors);
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
   }, []);
   
   const isDevMode = envConfig?.ENV === 'DEV';
@@ -54,7 +75,7 @@ function AppLayout() {
   };
   
   return (
-    <div className="h-full w-full bg-background dark">
+    <div className={cn("h-full w-full bg-background", isDark && "dark")}>
       {/* Layout wrapper - couvre tout l'écran */}
       <div className="flex flex-col h-full w-full">
         {/* Topbar - barre supérieure */}

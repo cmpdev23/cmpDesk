@@ -86,6 +86,36 @@ const appAPI = {
 };
 
 // ============================================================================
+// THEME API
+// ============================================================================
+
+const themeAPI = {
+  /**
+   * Get current theme mode and effective dark-color state.
+   * @returns {Promise<{ mode: 'dark'|'light'|'system', shouldUseDarkColors: boolean }>}
+   */
+  getMode: () => ipcRenderer.invoke('theme:getMode'),
+
+  /**
+   * Set theme from renderer.
+   * @param {'dark'|'light'|'system'} mode
+   * @returns {Promise<{ success: boolean, mode?: string, error?: string }>}
+   */
+  setMode: (mode) => ipcRenderer.invoke('theme:setMode', mode),
+
+  /**
+   * Subscribe to theme changes triggered from the native menu.
+   * @param {Function} callback - Called with { mode, shouldUseDarkColors }
+   * @returns {Function} Unsubscribe function
+   */
+  onChange: (callback) => {
+    const handler = (event, payload) => callback(payload);
+    ipcRenderer.on('theme:changed', handler);
+    return () => ipcRenderer.removeListener('theme:changed', handler);
+  },
+};
+
+// ============================================================================
 // LOGS API
 // ============================================================================
 
@@ -133,8 +163,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ...appAPI,
   auth: authAPI,
   logs: logsAPI,
+  theme: themeAPI,
 });
 
 console.log('🚀 cmpDesk preload script loaded');
 console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
+console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');

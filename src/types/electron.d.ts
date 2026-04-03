@@ -77,6 +77,34 @@ export interface LogsAPI {
 }
 
 // ============================================================================
+// THEME API
+// ============================================================================
+
+export type ThemeMode = 'dark' | 'light' | 'system';
+
+export interface ThemeModeResult {
+  mode: ThemeMode;
+  shouldUseDarkColors: boolean;
+}
+
+export interface ThemeSetResult {
+  success: boolean;
+  mode?: ThemeMode;
+  error?: string;
+}
+
+export interface ThemeAPI {
+  /** Get the current theme mode and effective dark-color state */
+  getMode: () => Promise<ThemeModeResult>;
+
+  /** Set the theme mode programmatically */
+  setMode: (mode: ThemeMode) => Promise<ThemeSetResult>;
+
+  /** Subscribe to theme changes triggered from the native menu */
+  onChange: (callback: (payload: ThemeModeResult) => void) => () => void;
+}
+
+// ============================================================================
 // ELECTRON API
 // ============================================================================
 
@@ -87,6 +115,7 @@ export interface ElectronAPI {
   getEnvConfig: () => Promise<EnvConfig>;
   auth: AuthAPI;
   logs: LogsAPI;
+  theme: ThemeAPI;
 }
 
 declare global {

@@ -10,7 +10,7 @@
  * - Log management and streaming to renderer
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -451,6 +451,82 @@ const WINDOW_CONFIG = {
 
 let mainWindow = null;
 
+// ============================================================================
+// NATIVE MENU — View > Theme
+// ============================================================================
+
+/**
+ * Apply a theme mode: 'dark' | 'light' | 'system'
+ * Sets nativeTheme.themeSource and notifies the renderer via IPC.
+ */
+function applyTheme(mode) {
+  nativeTheme.themeSource = mode; // 'dark' | 'light' | 'system'
+  log.info('SYSTEM', `Theme changed to: ${mode}`);
+  
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('theme:changed', {
+      mode,
+      shouldUseDarkColors: nativeTheme.shouldUseDarkColors,
+    });
+  }
+  
+  // Rebuild menu to update checkmarks
+  buildMenu();
+}
+
+/**
+ * Build and set the application menu with a View > Theme submenu.
+ */
+function buildMenu() {
+  const currentSource = nativeTheme.themeSource; // 'dark' | 'light' | 'system'
+  
+  const template = [
+    {
+      label: 'Vue',
+      submenu: [
+        {
+          label: 'Thème sombre',
+          type: 'radio',
+          checked: currentSource === 'dark',
+          click: () => applyTheme('dark'),
+        },
+        {
+          label: 'Thème clair',
+          type: 'radio',
+          checked: currentSource === 'light',
+          click: () => applyTheme('light'),
+        },
+        {
+          label: 'Thème système',
+          type: 'radio',
+          checked: currentSource === 'system',
+          click: () => applyTheme('system'),
+        },
+      ],
+    },
+  ];
+  
+  // In development also expose DevTools toggle
+  if (ENV_CONFIG.ENV !== 'PROD') {
+    template.push({
+      label: 'Développement',
+      submenu: [
+        {
+          label: 'DevTools',
+          accelerator: 'F12',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.toggleDevTools();
+          },
+        },
+        { role: 'reload' },
+        { role: 'forceReload' },
+      ],
+    });
+  }
+  
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow(WINDOW_CONFIG);
 
@@ -468,6 +544,9 @@ function createWindow() {
     log.debug('SYSTEM', 'DevTools opened (SHOW_DEVTOOLS=true)');
   }
 
+  // Build the native menu with View > Theme
+  buildMenu();
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -482,6 +561,27 @@ function createWindow() {
 // ============================================================================
 // IPC HANDLERS
 // ============================================================================
+
+// ─── Theme ───────────────────────────────────────────────────────────────────
+
+// Get the current theme mode and effective dark-colors state
+ipcMain.handle('theme:getMode', () => {
+  return {
+    mode: nativeTheme.themeSource,          // 'dark' | 'light' | 'system'
+    shouldUseDarkColors: nativeTheme.shouldUseDarkColors,
+  };
+});
+
+// Set theme from renderer (e.g. a toggle button in the UI)
+ipcMain.handle('theme:setMode', (event, mode) => {
+  if (!['dark', 'light', 'system'].includes(mode)) {
+    return { success: false, error: `Invalid theme mode: ${mode}` };
+  }
+  applyTheme(mode);
+  return { success: true, mode };
+});
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
 // Get session status (quick check, no browser)
 ipcMain.handle('auth:getStatus', async () => {
