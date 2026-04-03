@@ -143,6 +143,16 @@ src/
 - `Button` — shadcn button with variants: `default`, `outline`, `secondary`, `ghost`, `destructive`, `link`
 - `Stepper` — Custom stepper for multi-step forms
 - `FormField`, `InputField`, `SelectField` — Generic wrappers styled with shadcn tokens
+- `Sidebar`, `SidebarProvider`, `SidebarInset`, `SidebarMenu`, `SidebarMenuButton`, etc. — shadcn Sidebar primitives (installed 2026-04-03)
+
+### Sidebar Migration (2026-04-03)
+
+- Old `<aside>` hand-rolled sidebar in `AppLayout.tsx` **replaced** by shadcn `<Sidebar>` primitives
+- `TooltipProvider` added to `App.tsx` wrapping all routes (required by shadcn Sidebar)
+- `SidebarProvider` lives inside `AppLayout.tsx` wrapping the full layout
+- `SidebarTrigger` placed in the topbar for collapse/expand
+- `SidebarMenuButton asChild isActive` drives active state — no manual `getNavLinkClass()` helper needed
+- `AuthStatus` component moved into `<SidebarFooter>`
 
 ### Rules
 
