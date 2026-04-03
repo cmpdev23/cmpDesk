@@ -853,3 +853,109 @@ npm run electron:start  # Start Electron only (after build)
 - [ ] Connect SQLite via better-sqlite3 or sql.js
 - [ ] Create IPC handlers for database operations
 - [ ] Build first real page (e.g., Dossiers list)
+
+---
+
+## Milestone — Auth Module Migration (2026-04-03)
+
+### Overview
+
+Migrated `model/auth/` exploration code to production-ready `src/lib/auth/` for the desktop app.
+
+### Architecture
+
+```
+src/lib/auth/
+├── index.ts           # Central exports - import from here
+├── session-manager.ts # High-level API (SessionManager class)
+├── browser-context.ts # Low-level Playwright management
+├── storage.ts         # Path management for Electron
+└── types.ts           # TypeScript type definitions
+```
+
+### Key Design Decisions
+
+1. **Electron Path Integration**
+   - Uses `app.getPath('userData')` for cross-platform compatibility
+   - All auth data stored in `userData/auth/`
+   - Fallback to `.cmpdesk-data/` for development outside Electron
+
+2. **Session Persistence Strategy**
+   - Browser profile (Playwright persistent context): `userData/auth/browser_profile/`
+   - Cookies file (explicit persistence): `userData/auth/cookies.json`
+   - Session metadata: `userData/auth/session_state.json`
+   - **Session cookies (expires=-1) converted to 24h persistent cookies**
+
+3. **Multi-Session Support (Prepared)**
+   - Default: `userData/auth/browser_profile/`
+   - Named: `userData/auth/{sessionId}/browser_profile/`
+   - Not fully implemented, but structure supports it
+
+4. **Separation of Concerns**
+   - `storage.ts` → Path management only
+   - `browser-context.ts` → Playwright operations
+   - `session-manager.ts` → High-level API
+   - `types.ts` → All TypeScript types
+
+### Usage Examples
+
+```typescript
+// Option 1: SessionManager class (recommended)
+import { SessionManager } from '@/lib/auth';
+
+const session = new SessionManager();
+try {
+    await session.open();
+    await session.goto("https://example.com");
+    console.log(await session.title());
+} finally {
+    await session.close();
+}
+
+// Option 2: withSession helper
+import { withSession } from '@/lib/auth';
+
+const title = await withSession(async (session) => {
+    await session.goto("https://example.com");
+    return session.title();
+});
+
+// Option 3: Quick status check (no browser)
+import { quickSessionCheck, getAuthPaths } from '@/lib/auth';
+
+const status = quickSessionCheck();
+console.log(status.isValid, status.cookieCount);
+
+const paths = getAuthPaths();
+console.log(paths.browserProfile);
+```
+
+### Auth Targets Configured
+
+| Target | Cookie Names | Home URL |
+|--------|--------------|----------|
+| INALCO (default) | `.ASPXAUTH`, `ee-authenticated` | `https://iaa.secureweb.inalco.com/MKMWPN23/home` |
+| Salesforce | `sid`, `sfdc_lv2`, `oid` | `https://indall.lightning.force.com/lightning/page/home` |
+
+### Error Handling
+
+Custom error classes with codes:
+- `AuthenticationError`: `SESSION_EXPIRED`, `AUTH_TIMEOUT`, `HEADLESS_AUTH_REQUIRED`, `BROWSER_PROFILE_LOCKED`
+- `SessionError`: `NOT_OPENED`, `ALREADY_OPENED`, `CONTEXT_CLOSED`
+
+### Migration from model/auth
+
+| Old (model/auth) | New (src/lib/auth) | Notes |
+|------------------|-------------------|-------|
+| `session_manager.js` | `session-manager.ts` | TypeScript, cleaner API |
+| `browser_context.js` | `browser-context.ts` | TypeScript, better error handling |
+| `salesforce_session.js` | `types.ts` (AUTH_TARGETS) | Merged into types |
+| `salesforce_sso.js` | Not migrated yet | Will be separate module |
+| Hardcoded paths | `storage.ts` | Electron-aware paths |
+
+### Rules
+
+- **NEVER hardcode auth paths** — Always use `getAuthPaths()`
+- **ALWAYS call session.close()** — Use try/finally pattern
+- **Use domcontentloaded** — Not networkidle (SF Lightning)
+- **Check isOpen before operations** — Session must be opened first
