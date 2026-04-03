@@ -1,9 +1,9 @@
 /**
- * @file src/components/forms/InputField.tsx
- * @description Styled text input for forms — wraps shadcn/ui Input
+ * @file src/components/ui/input-field.tsx
+ * @description Generic styled text input — wraps shadcn/ui Input
  *
+ * Reusable across all modules. No business logic, no domain coupling.
  * Design System: shadcn/ui (radix-lyra preset)
- * No extra styling — design system handles appearance via CSS variables.
  */
 
 import { ChangeEvent } from 'react';
@@ -25,6 +25,7 @@ interface InputFieldProps {
 
 /**
  * Thin wrapper around shadcn Input, forwarding all standard props.
+ * Use this in any module form — it is module-agnostic.
  */
 export function InputField({
   id,

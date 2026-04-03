@@ -10,12 +10,11 @@
  * @see docs/opportunity.md - Full field documentation
  */
 
-import { useState } from "react";
-import { OpportunityFormStep1 } from "../components/dossiers";
-import { DEFAULT_STEP1_DATA } from "../lib/opportunity/types";
-import type { OpportunityStep1Data } from "../lib/opportunity/types";
-import { Stepper } from "../components/ui/stepper";
-import { Button } from "@/components/ui/button";
+import { useState } from 'react';
+import { OpportunityFormStep1, DEFAULT_STEP1_DATA } from '@/modules/dossiers';
+import type { OpportunityStep1Data } from '@/modules/dossiers';
+import { Stepper } from '@/components/ui/stepper';
+import { Button } from '@/components/ui/button';
 
 /**
  * Dossiers page - Multi-step form for opportunity creation
@@ -26,8 +25,7 @@ function Dossiers() {
   const totalSteps = 3; // Total steps as per docs/opportunity.md
 
   // Form data state for Step 1
-  const [step1Data, setStep1Data] =
-    useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
+  const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
 
   // Form errors (will be used for validation later)
   const [errors] = useState<Record<string, string>>({});
@@ -43,16 +41,14 @@ function Dossiers() {
       <div className="p-2 border-b border-border bg-background">
         <div className="flex flex-col justify-between max-w-4xl gap-4 md:flex-row md:items-center">
           <div>
-            <h1 className="text-xl font-bold text-foreground">
-              Nouveau dossier
-            </h1>
+            <h1 className="text-xl font-bold text-foreground">Nouveau dossier</h1>
           </div>
 
           <Stepper
             steps={[
-              { title: "Informations générales" },
-              { title: "Famille de produit" },
-              { title: "Type de signature" },
+              { title: 'Informations générales' },
+              { title: 'Famille de produit' },
+              { title: 'Type de signature' },
             ]}
             currentStep={currentStep}
           />
@@ -95,7 +91,7 @@ function Dossiers() {
               </Button>
 
               <Button>
-                {currentStep === totalSteps ? "Créer le dossier" : "Suivant →"}
+                {currentStep === totalSteps ? 'Créer le dossier' : 'Suivant →'}
               </Button>
             </div>
 

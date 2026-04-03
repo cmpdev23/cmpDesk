@@ -1,7 +1,8 @@
 /**
- * @file src/components/forms/FormField.tsx
- * @description Reusable form field wrapper with label and error display
- * 
+ * @file src/components/ui/form-field.tsx
+ * @description Generic form field wrapper with label and error display
+ *
+ * Reusable across all modules. Provides consistent label + error styling.
  * Design System: shadcn/ui (radix-lyra preset)
  */
 
@@ -18,19 +19,20 @@ interface FormFieldProps {
 }
 
 /**
- * Form field wrapper providing consistent styling for labels and error messages
+ * Form field wrapper providing consistent styling for labels and error messages.
+ * Use this in any module form — it is module-agnostic.
  */
-export function FormField({ 
-  label, 
-  htmlFor, 
-  required, 
-  error, 
+export function FormField({
+  label,
+  htmlFor,
+  required,
+  error,
   children,
-  className 
+  className,
 }: FormFieldProps) {
   return (
-    <div className={cn("space-y-1.5", className)}>
-      <label 
+    <div className={cn('space-y-1.5', className)}>
+      <label
         htmlFor={htmlFor}
         className="block text-sm font-medium text-foreground"
       >
@@ -38,9 +40,7 @@ export function FormField({
         {required && <span className="text-destructive ml-1">*</span>}
       </label>
       {children}
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

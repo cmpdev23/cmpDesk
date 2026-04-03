@@ -1,7 +1,7 @@
 /**
- * @file src/lib/opportunity/types.ts
- * @description Types for Opportunity form data
- * 
+ * @file src/modules/dossiers/types/index.ts
+ * @description TypeScript types for the Dossiers module (Opportunity form)
+ *
  * @see docs/opportunity.md - Full field documentation
  */
 
@@ -12,32 +12,32 @@
  */
 export interface OpportunityStep1Data {
   // Picklist fields
-  opportunityCategory: string;     // Opportunity_Category__c
-  productInterest: string;         // Product_Interest__c
-  subsidiary: string;              // Subsidiary__c
-  
+  opportunityCategory: string; // Opportunity_Category__c
+  productInterest: string; // Product_Interest__c
+  subsidiary: string; // Subsidiary__c
+
   // Text fields
-  proposalNumber: string;          // Proposal_Number__c
-  contractNumber: string;          // Contract_Number__c
-  
+  proposalNumber: string; // Proposal_Number__c
+  contractNumber: string; // Contract_Number__c
+
   // Date field
-  transactionDate: string;         // Transaction_Date__c (ISO format YYYY-MM-DD)
-  
+  transactionDate: string; // Transaction_Date__c (ISO format YYYY-MM-DD)
+
   // Currency field
-  annualPremium: string;           // Annual_Premium__c (string for input, converted to number)
-  
-  // Contact fields (not in Salesforce opportunity, but needed for workflow)
-  phone: string;                   // Client phone
-  email: string;                   // Client email
+  annualPremium: string; // Annual_Premium__c (string for input, converted to number on submit)
+
+  // Contact fields (workflow fields — not direct Salesforce Opportunity fields)
+  phone: string; // Client phone
+  email: string; // Client email
 }
 
 /**
- * Full Opportunity form data (all steps combined)
- * Will be extended as we add more steps
+ * Full Opportunity form data (all steps combined).
+ * Extended as we add more steps.
  */
 export interface OpportunityFormData extends OpportunityStep1Data {
-  // Step 2 fields will be added here
-  // Step 3 fields will be added here
+  // Step 2 fields (Case: Product_Family__c, Transaction_Category__c, etc.) — TBD
+  // Step 3 fields (Case: SignatureType__c, etc.) — TBD
 }
 
 // ─── Default Values ───────────────────────────────────────────────────────────

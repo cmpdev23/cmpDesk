@@ -1383,6 +1383,76 @@ const [isDark, setIsDark] = useState<boolean>(true);
 
 ---
 
+## Milestone — Module Architecture (2026-04-03)
+
+### Overview
+
+Refactored the UI source from a flat `components/` structure to a domain-driven `modules/` architecture.
+
+### Decision
+
+`src/components/forms/` + `src/components/dossiers/` + `src/lib/opportunity/` were all coupled to the same domain but scattered across three different locations. This doesn't scale when adding new modules (Cases, Documents, etc.).
+
+### New Structure
+
+```
+src/
+├── components/
+│   └── ui/                        ← Primitives + generic wrappers (shadcn + custom)
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── input.tsx
+│       ├── select.tsx
+│       ├── stepper.tsx
+│       ├── form-field.tsx          ← NEW: generic label+error wrapper
+│       ├── input-field.tsx         ← NEW: generic input wrapper
+│       └── select-field.tsx        ← NEW: generic select wrapper + PicklistOption type
+│
+├── modules/
+│   └── dossiers/                  ← Everything for the Dossiers domain
+│       ├── components/
+│       │   └── OpportunityFormStep1.tsx
+│       ├── types/
+│       │   └── index.ts           ← OpportunityStep1Data, ValidationResult, defaults
+│       ├── lib/
+│       │   └── picklists.ts       ← Salesforce picklist mappings
+│       └── index.ts               ← Public barrel export (import from here only)
+│
+├── lib/                           ← Cross-app utilities ONLY
+│   ├── logger.ts
+│   └── utils.ts
+│
+└── pages/
+    └── Dossiers.tsx               ← Imports from @/modules/dossiers
+```
+
+### Key Rules Established
+
+- **`src/components/ui/`** → Primitives + generic wrappers. Zero domain knowledge. Reusable everywhere.
+- **`src/modules/{module}/`** → Everything domain-specific. Self-contained.
+- **`src/lib/`** → Cross-app utilities only (logger, utils, auth). No UI components.
+- **Pages import from module barrel** (`@/modules/dossiers`), never from internal paths.
+- **`PicklistOption` lives in `select-field.tsx`** — modules import it from there, not from domain files.
+
+### Adding a New Module
+
+```
+src/modules/{name}/
+├── components/    ← React components
+├── types/         ← TypeScript interfaces + defaults
+├── lib/           ← Business logic, API mappings
+├── hooks/         ← Custom React hooks (optional)
+└── index.ts       ← Public API barrel export
+```
+
+### Files Deleted
+
+- `src/components/dossiers/` (moved to `src/modules/dossiers/components/`)
+- `src/components/forms/` (moved to `src/components/ui/`)
+- `src/lib/opportunity/` (moved to `src/modules/dossiers/types/` and `src/modules/dossiers/lib/`)
+
+---
+
 ## Milestone — Native Theme Toggle (2026-04-03)
 
 ### Overview

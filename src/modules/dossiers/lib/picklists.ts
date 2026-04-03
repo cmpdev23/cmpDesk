@@ -1,19 +1,17 @@
 /**
- * @file src/lib/opportunity/picklists.ts
+ * @file src/modules/dossiers/lib/picklists.ts
  * @description Picklist mappings for Opportunity fields
- * 
- * These mappings connect Salesforce API values to French labels for UI display.
+ *
+ * Connects Salesforce API values to French UI labels.
  * Source: docs/opportunity.md (extracted via API inspection)
- * 
+ *
  * @see docs/opportunity.md - Full field documentation
  */
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import type { PicklistOption } from '@/components/ui/select-field';
 
-export interface PicklistOption {
-  value: string;  // API value (sent to Salesforce)
-  label: string;  // French label (displayed in UI)
-}
+// Re-export PicklistOption so module consumers can import from one place
+export type { PicklistOption };
 
 // ─── Product Interest (Produit d'intérêt) ─────────────────────────────────────
 
@@ -69,15 +67,15 @@ export const SUBSIDIARY_OPTIONS: PicklistOption[] = [
 // ─── Helper Functions ─────────────────────────────────────────────────────────
 
 /**
- * Get the French label for an API value from a picklist
+ * Get the French label for a given API value from a picklist.
  */
 export function getLabelForValue(options: PicklistOption[], value: string): string | undefined {
-  return options.find(opt => opt.value === value)?.label;
+  return options.find((opt) => opt.value === value)?.label;
 }
 
 /**
- * Get the API value for a French label from a picklist
+ * Get the API value for a given French label from a picklist.
  */
 export function getValueForLabel(options: PicklistOption[], label: string): string | undefined {
-  return options.find(opt => opt.label === label)?.value;
+  return options.find((opt) => opt.label === label)?.value;
 }

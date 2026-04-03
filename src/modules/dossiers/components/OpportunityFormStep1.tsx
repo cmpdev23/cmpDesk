@@ -1,6 +1,6 @@
 /**
- * @file src/components/dossiers/OpportunityFormStep1.tsx
- * @description Step 1 of the Opportunity creation form - Informations générales
+ * @file src/modules/dossiers/components/OpportunityFormStep1.tsx
+ * @description Step 1 of the Opportunity creation form — Informations générales
  *
  * Fields included (from docs/opportunity.md):
  * - Opportunity_Category__c (Catégorie de l'opportunité)
@@ -10,14 +10,16 @@
  * - Contract_Number__c (Numéro de contrat)
  * - Transaction_Date__c (Date de transaction)
  * - Annual_Premium__c (Prime annuelle)
- * + Phone (Téléphone) - workflow field
- * + Email (Courriel) - workflow field
+ * + Phone (Téléphone) — workflow field
+ * + Email (Courriel) — workflow field
  *
  * Design System: shadcn/ui (radix-lyra preset)
  */
 
 import { ChangeEvent } from 'react';
-import { FormField, SelectField, InputField } from '../forms';
+import { FormField } from '@/components/ui/form-field';
+import { InputField } from '@/components/ui/input-field';
+import { SelectField } from '@/components/ui/select-field';
 import {
   Card,
   CardContent,
@@ -29,8 +31,8 @@ import {
   OPPORTUNITY_CATEGORY_OPTIONS,
   PRODUCT_INTEREST_OPTIONS,
   SUBSIDIARY_OPTIONS,
-} from '../../lib/opportunity/picklists';
-import type { OpportunityStep1Data } from '../../lib/opportunity/types';
+} from '../lib/picklists';
+import type { OpportunityStep1Data } from '../types';
 
 interface OpportunityFormStep1Props {
   data: OpportunityStep1Data;
@@ -51,19 +53,17 @@ export function OpportunityFormStep1({
   onChange,
   errors = {},
 }: OpportunityFormStep1Props) {
-
   // Handler for shadcn Input (DOM ChangeEvent)
-  const handleInputChange = (
-    e: ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     onChange({ ...data, [name]: value });
   };
 
   // Handler for shadcn Select (Radix onValueChange — pure string)
-  const handleSelectChange = (field: keyof OpportunityStep1Data) => (value: string) => {
-    onChange({ ...data, [field]: value });
-  };
+  const handleSelectChange =
+    (field: keyof OpportunityStep1Data) => (value: string) => {
+      onChange({ ...data, [field]: value });
+    };
 
   return (
     <Card>
