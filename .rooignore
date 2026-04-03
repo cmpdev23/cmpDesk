@@ -1,0 +1,8 @@
+# Fichiers sensibles — tokens de session, ne jamais exposer à l'agent
+auth/session.json
+.env
+auth/storage_state.json
+auth/browser_profile/
+data/journeys/journeys.json
+journeys.json
+py_utils/

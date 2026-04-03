@@ -1,0 +1,7 @@
+# Folder for SQLite database
+# Database files and migrations will go here
+# 
+# Structure prévue:
+# - database/cmpdesk.db (SQLite database file)
+# - database/migrations/ (migration scripts)
+# - database/schema.sql (database schema)

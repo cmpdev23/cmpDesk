@@ -1,0 +1,65 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Auth - Sensitive session data (NEVER commit these)
+browser_profile/
+auth/session.json
+auth/storage_state.json
+auth/session_state.json
+auth/persisted_cookies.json
+
+# Data outputs
+data/journeys/*.json
+data/journeys/debug_*.txt
+
+# Logs
+*.log
+logs/
+data/jsons/
+data/contacts/
+report/
+test/flow/debug_form_load.png
+auth/salesforce_cookies.json
+node_modules/
+py_utils/
+scripts/seeds/files/
+
+# Electron / Vite
+dist/
+dist-electron/
+*.local
