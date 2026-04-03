@@ -1,70 +1,63 @@
 /**
  * @file src/components/forms/SelectField.tsx
- * @description Styled select dropdown for forms
- * 
+ * @description Styled select dropdown for forms — wraps shadcn/ui Select
+ *
  * Design System: shadcn/ui (radix-lyra preset)
+ *
+ * API note: shadcn Select uses `onValueChange: (value: string) => void`
+ * (Radix UI), NOT a DOM ChangeEvent. Callers must use onValueChange.
  */
 
-import { ChangeEvent } from 'react';
-import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { PicklistOption } from '../../lib/opportunity/picklists';
 
 interface SelectFieldProps {
   id: string;
   name: string;
   value: string;
-  onChange: (e: ChangeEvent<HTMLSelectElement>) => void;
+  onValueChange: (value: string) => void;
   options: PicklistOption[];
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
-  className?: string;
 }
 
 /**
- * Styled select dropdown matching the shadcn design system
+ * Thin wrapper around shadcn Select, mapping PicklistOption[] to SelectItems.
+ * No extra styling — design system handles appearance via CSS variables.
  */
 export function SelectField({
   id,
   name,
   value,
-  onChange,
+  onValueChange,
   options,
   placeholder = 'Sélectionner...',
   disabled = false,
-  required = false,
-  className,
 }: SelectFieldProps) {
   return (
-    <select
-      id={id}
+    <Select
       name={name}
       value={value}
-      onChange={onChange}
+      onValueChange={onValueChange}
       disabled={disabled}
-      required={required}
-      className={cn(
-        "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        "appearance-none cursor-pointer pr-10",
-        className
-      )}
-      style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'right 0.5rem center',
-        backgroundSize: '1.25em 1.25em',
-      }}
     >
-      <option value="" disabled className="text-muted-foreground">
-        {placeholder}
-      </option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

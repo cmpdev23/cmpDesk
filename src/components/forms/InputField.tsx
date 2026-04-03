@@ -1,12 +1,13 @@
 /**
  * @file src/components/forms/InputField.tsx
- * @description Styled text input for forms
- * 
+ * @description Styled text input for forms — wraps shadcn/ui Input
+ *
  * Design System: shadcn/ui (radix-lyra preset)
+ * No extra styling — design system handles appearance via CSS variables.
  */
 
 import { ChangeEvent } from 'react';
-import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 interface InputFieldProps {
   id: string;
@@ -23,7 +24,7 @@ interface InputFieldProps {
 }
 
 /**
- * Styled text input matching the shadcn design system
+ * Thin wrapper around shadcn Input, forwarding all standard props.
  */
 export function InputField({
   id,
@@ -39,7 +40,7 @@ export function InputField({
   className,
 }: InputFieldProps) {
   return (
-    <input
+    <Input
       id={id}
       name={name}
       type={type}
@@ -50,14 +51,7 @@ export function InputField({
       required={required}
       min={min}
       step={step}
-      className={cn(
-        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors",
-        "file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground",
-        "placeholder:text-muted-foreground",
-        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
+      className={className}
     />
   );
 }
