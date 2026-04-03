@@ -2,7 +2,7 @@
  * @file src/components/forms/InputField.tsx
  * @description Styled text input for forms
  * 
- * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui (radix-lyra preset)
  */
 
 import { ChangeEvent } from 'react';
@@ -23,7 +23,7 @@ interface InputFieldProps {
 }
 
 /**
- * Styled text input matching the dark theme
+ * Styled text input matching the shadcn design system
  */
 export function InputField({
   id,
@@ -51,7 +51,7 @@ export function InputField({
       min={min}
       step={step}
       className={cn(
-        "flex h-9 w-full rounded-md border border-input bg-accent px-3 py-1 text-sm shadow-sm transition-colors",
+        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors",
         "file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground",
         "placeholder:text-muted-foreground",
         "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",

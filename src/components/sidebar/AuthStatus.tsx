@@ -9,7 +9,7 @@
  * - Reconnect button when session expired
  * - Loading state during authentication
  * 
- * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui (radix-lyra preset)
  * 
  * Usage:
  *   <AuthStatus />
@@ -122,11 +122,11 @@ export function AuthStatus() {
 
   // Render based on connection state
   return (
-    <div className="p-4 border-t border-border">
+    <div className="p-4 border-t border-sidebar-border">
       {/* Status indicator */}
       <div className="flex items-center gap-2 mb-3">
         <StatusIndicator state={state.connectionState} />
-        <span className="text-muted-foreground text-sm">
+        <span className="text-sidebar-foreground text-sm">
           {getStatusLabel(state.connectionState)}
         </span>
       </div>

@@ -7,7 +7,7 @@ import type { EnvConfig } from "../types/electron";
 /**
  * Layout global de l'application cmpDesk
  *
- * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui (radix-lyra preset)
  *
  * Structure:
  * ┌─────────────────────────────────────────────┐
@@ -15,7 +15,7 @@ import type { EnvConfig } from "../types/electron";
  * ├──────────┬──────────────────────────────────┤
  * │          │                                  │
  * │ Sidebar  │       Content Area               │
- * │ (card)   │       (bg-background)            │
+ * │ (sidebar)│       (bg-background)            │
  * │          │                                  │
  * │          │       <Outlet /> ← pages         │
  * │          │                                  │
@@ -48,13 +48,13 @@ function AppLayout() {
     return cn(
       "block px-3 py-2 rounded-md transition-colors",
       isActive
-        ? "text-foreground bg-accent"
-        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+        ? "text-sidebar-primary-foreground bg-sidebar-primary"
+        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
     );
   };
   
   return (
-    <div className="h-full w-full bg-background">
+    <div className="h-full w-full bg-background dark">
       {/* Layout wrapper - couvre tout l'écran */}
       <div className="flex flex-col h-full w-full">
         {/* Topbar - barre supérieure */}
@@ -71,7 +71,7 @@ function AppLayout() {
         {/* Container horizontal: Sidebar + Content */}
         <div className="flex flex-1 min-h-0">
           {/* Sidebar - navigation latérale */}
-          <aside className="w-56 bg-card border-r border-border flex flex-col shrink-0">
+          <aside className="w-56 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0">
             {/* Navigation */}
             <nav className="flex-1 p-4">
               <ul className="space-y-1">
@@ -86,7 +86,7 @@ function AppLayout() {
                   </NavLink>
                 </li>
                 <li>
-                  <span className="block px-3 py-2 text-muted-foreground/50 cursor-not-allowed rounded-md hover:bg-accent transition-colors">
+                  <span className="block px-3 py-2 text-muted-foreground/50 cursor-not-allowed rounded-md hover:bg-sidebar-accent transition-colors">
                     Paramètres
                   </span>
                 </li>

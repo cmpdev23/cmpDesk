@@ -5,7 +5,7 @@
  * Multi-step form for creating Opportunities in Salesforce.
  * Currently implements Step 1 - Informations générales.
  *
- * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui (radix-lyra preset)
  *
  * @see docs/opportunity.md - Full field documentation
  */
@@ -40,7 +40,7 @@ function Dossiers() {
   return (
     <div className="flex flex-col h-full">
       {/* Page header */}
-      <div className="p-2 border-border bg-background">
+      <div className="p-2 border-b border-border bg-background">
         <div className="flex flex-col justify-between max-w-4xl gap-4 md:flex-row md:items-center">
           <div>
             <h1 className="text-xl font-bold text-foreground">
@@ -108,7 +108,7 @@ function Dossiers() {
                 <summary className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">
                   Debug: Form Data
                 </summary>
-                <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-accent text-muted-foreground">
+                <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
                   {JSON.stringify(step1Data, null, 2)}
                 </pre>
               </details>

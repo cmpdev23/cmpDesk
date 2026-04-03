@@ -1,7 +1,7 @@
 /**
  * Page d'accueil de cmpDesk
  * 
- * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui (radix-lyra preset)
  */
 
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ function Home() {
       <div className="bg-card rounded-lg p-6 border border-border">
         <div className="flex items-center gap-2 mb-4">
           <span className="w-2 h-2 bg-chart-2 rounded-full"></span>
-          <h2 className="text-lg font-semibold text-foreground">
+          <h2 className="text-lg font-semibold text-card-foreground">
             Structure initialisée
           </h2>
         </div>

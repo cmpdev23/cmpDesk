@@ -13,7 +13,7 @@
  * + Phone (Téléphone) - workflow field
  * + Email (Courriel) - workflow field
  * 
- * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui (radix-lyra preset)
  */
 
 import { ChangeEvent } from 'react';
@@ -56,7 +56,7 @@ export function OpportunityFormStep1({
     <div className="space-y-6">
       {/* Section header */}
       <div className="pb-4 border-b border-border">
-        <h2 className="text-xl font-semibold text-foreground">
+        <h2 className="text-xl font-semibold text-card-foreground">
           Étape 1 — Informations générales
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">

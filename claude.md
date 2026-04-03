@@ -1258,3 +1258,123 @@ logDebug('AUTH', 'Token received', { tokenLength: token.length });
 - [ ] Add Debug Panel UI component
 - [ ] Add log export functionality
 - [ ] Add log level toggle in Settings UI
+
+---
+
+## Milestone — shadcn/ui Integration (2026-04-03)
+
+### Overview
+
+Integrated shadcn/ui design system with custom preset `b38TxqOZv` (radix-lyra style).
+
+### Installation Command
+
+```bash
+npx shadcn@latest init --preset b38TxqOZv --template vite
+```
+
+### Design System Configuration
+
+| Setting | Value |
+|---------|-------|
+| Style | `radix-lyra` |
+| Color Format | `oklch` |
+| Base Color | `neutral` |
+| CSS Variables | `true` |
+| Icon Library | `lucide` |
+| Font | `Manrope Variable` |
+
+### Files Structure
+
+```
+src/
+├── index.css                 # Main CSS with shadcn variables (oklch)
+├── components/
+│   └── ui/
+│       ├── button.tsx        # shadcn Button component
+│       └── stepper.tsx       # Custom Stepper component
+├── lib/
+│   └── utils.ts              # cn() utility for class merging
+└── styles/
+    └── (deleted style.css)   # Old custom CSS removed
+```
+
+### CSS Variables (oklch format)
+
+The preset uses oklch color space for better color manipulation:
+
+**Light Theme:**
+- `--background: oklch(1 0 0)`
+- `--foreground: oklch(0.145 0 0)`
+- `--primary: oklch(0.457 0.24 277.023)`
+- `--card: oklch(1 0 0)`
+- `--muted: oklch(0.97 0 0)`
+
+**Dark Theme:**
+- `--background: oklch(0.145 0 0)`
+- `--foreground: oklch(0.985 0 0)`
+- `--primary: oklch(0.398 0.195 277.366)`
+- `--card: oklch(0.205 0 0)`
+- `--muted: oklch(0.269 0 0)`
+
+### Sidebar Variables
+
+The preset includes sidebar-specific tokens:
+- `--sidebar` / `--sidebar-foreground`
+- `--sidebar-primary` / `--sidebar-primary-foreground`
+- `--sidebar-accent` / `--sidebar-accent-foreground`
+- `--sidebar-border` / `--sidebar-ring`
+
+### Tailwind Configuration
+
+`tailwind.config.js` uses CSS variables directly (no hsl wrapping needed with oklch):
+
+```javascript
+colors: {
+  background: "var(--background)",
+  foreground: "var(--foreground)",
+  primary: {
+    DEFAULT: "var(--primary)",
+    foreground: "var(--primary-foreground)",
+  },
+  // ...
+}
+```
+
+### Component Migration
+
+All components updated to use shadcn design tokens:
+
+| Old Token | New Token |
+|-----------|-----------|
+| `bg-app` | `bg-background` |
+| `bg-surface` | `bg-card` |
+| `text-text-primary` | `text-foreground` |
+| `text-text-secondary` | `text-muted-foreground` |
+| `border-border` | `border-border` (unchanged) |
+| `bg-primary` | `bg-primary` (unchanged) |
+| `text-success` | `text-chart-2` |
+| `text-warning` | `text-chart-3` |
+| `text-danger` | `text-destructive` |
+
+### Dark Mode
+
+The app defaults to dark mode by adding `dark` class to the root element in `AppLayout.tsx`:
+
+```tsx
+<div className="h-full w-full bg-background dark">
+```
+
+### Rules
+
+- **ALWAYS use shadcn tokens** — Never use raw color values
+- **Use `cn()` for class merging** — Import from `@/lib/utils`
+- **Follow oklch format** — When adding custom colors, use oklch
+- **Sidebar-specific tokens exist** — Use `sidebar-*` for sidebar components
+- **Import styles from `src/index.css`** — Not from `src/styles/`
+
+### Components Available
+
+- `Button` — shadcn button with variants (default, outline, secondary, ghost, destructive, link)
+- `Stepper` — Custom stepper for multi-step forms
+- Form components (FormField, InputField, SelectField) — Styled with shadcn tokens

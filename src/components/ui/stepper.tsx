@@ -31,7 +31,7 @@ export function Stepper({ steps, currentStep, className }: StepperProps) {
                     ? "bg-primary border-primary text-primary-foreground"
                     : isCompleted
                     ? "bg-chart-2 border-chart-2 text-primary-foreground"
-                    : "bg-accent border-border text-muted-foreground"
+                    : "bg-muted border-border text-muted-foreground"
                 )}
               >
                 {isCompleted ? <Check className="w-3.5 h-3.5" /> : stepNumber}

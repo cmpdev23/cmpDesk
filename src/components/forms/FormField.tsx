@@ -2,7 +2,7 @@
  * @file src/components/forms/FormField.tsx
  * @description Reusable form field wrapper with label and error display
  * 
- * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui (radix-lyra preset)
  */
 
 import { ReactNode } from 'react';
@@ -32,7 +32,7 @@ export function FormField({
     <div className={cn("space-y-1.5", className)}>
       <label 
         htmlFor={htmlFor}
-        className="block text-sm font-medium text-muted-foreground"
+        className="block text-sm font-medium text-foreground"
       >
         {label}
         {required && <span className="text-destructive ml-1">*</span>}
