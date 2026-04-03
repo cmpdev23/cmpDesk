@@ -2,19 +2,152 @@
  * electron/main.js
  * ================
  * Main process for cmpDesk Electron application.
- * 
+ *
  * Responsibilities:
  * - Window management
  * - IPC handlers for auth operations
  * - Bridge between renderer and Node.js modules (Playwright)
+ * - Log management and streaming to renderer
  */
 
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// ============================================================================
+// ENVIRONMENT CONFIGURATION (using dotenv)
+// ============================================================================
+
+// Load .env file from project root
+const envPath = path.join(__dirname, '..', '.env');
+const envExamplePath = path.join(__dirname, '..', '.env.example');
+
+// Try .env first, then .env.example as fallback
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else if (fs.existsSync(envExamplePath)) {
+  dotenv.config({ path: envExamplePath });
+  console.warn('[env] No .env file found, using .env.example defaults');
+}
+
+// Environment config with defaults
+const ENV_CONFIG = {
+  ENV: process.env.ENV || 'DEV',
+  DEBUG_LOGS: process.env.DEBUG_LOGS !== 'false',
+  SHOW_DEVTOOLS: process.env.SHOW_DEVTOOLS === 'true',
+  LOG_LEVEL: process.env.LOG_LEVEL || 'debug',
+};
+
+// ============================================================================
+// LOGGER (Main Process) with Buffer for UI
+// ============================================================================
+
+const LOG_LEVEL_PRIORITY = { debug: 0, info: 1, warn: 2, error: 3 };
+const MAX_LOG_BUFFER_SIZE = 500;
+
+/** In-memory log buffer for UI display */
+const logBuffer = [];
+
+/**
+ * Check if a log level should be displayed.
+ */
+function shouldLog(level) {
+  // In PROD, only warn and error
+  if (ENV_CONFIG.ENV === 'PROD' && (level === 'debug' || level === 'info')) {
+    return false;
+  }
+  // Check DEBUG_LOGS for debug level
+  if (level === 'debug' && !ENV_CONFIG.DEBUG_LOGS) {
+    return false;
+  }
+  return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[ENV_CONFIG.LOG_LEVEL];
+}
+
+/**
+ * Format timestamp for log output.
+ */
+function formatTimestamp() {
+  return new Date().toISOString().slice(11, 23);
+}
+
+/**
+ * Add log entry to buffer and send to renderer if window exists.
+ */
+function addLogEntry(level, scope, message, data) {
+  const entry = {
+    id: Date.now() + Math.random().toString(36).substr(2, 9),
+    timestamp: new Date().toISOString(),
+    level,
+    scope,
+    message,
+    data: data !== undefined ? JSON.stringify(data) : undefined,
+  };
+  
+  logBuffer.push(entry);
+  
+  // Trim buffer if too large
+  if (logBuffer.length > MAX_LOG_BUFFER_SIZE) {
+    logBuffer.splice(0, logBuffer.length - MAX_LOG_BUFFER_SIZE);
+  }
+  
+  // Send to renderer if window exists
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('log:entry', entry);
+  }
+  
+  return entry;
+}
+
+/**
+ * Structured logger for main process.
+ */
+const log = {
+  debug(scope, message, data) {
+    if (!shouldLog('debug')) return;
+    addLogEntry('debug', scope, message, data);
+    const ts = formatTimestamp();
+    if (data !== undefined) {
+      console.debug(`\x1b[36m${ts} [DEBUG] [${scope}] ${message}\x1b[0m`, data);
+    } else {
+      console.debug(`\x1b[36m${ts} [DEBUG] [${scope}] ${message}\x1b[0m`);
+    }
+  },
+  info(scope, message, data) {
+    if (!shouldLog('info')) return;
+    addLogEntry('info', scope, message, data);
+    const ts = formatTimestamp();
+    if (data !== undefined) {
+      console.info(`\x1b[32m${ts} [INFO ] [${scope}] ${message}\x1b[0m`, data);
+    } else {
+      console.info(`\x1b[32m${ts} [INFO ] [${scope}] ${message}\x1b[0m`);
+    }
+  },
+  warn(scope, message, data) {
+    if (!shouldLog('warn')) return;
+    addLogEntry('warn', scope, message, data);
+    const ts = formatTimestamp();
+    if (data !== undefined) {
+      console.warn(`\x1b[33m${ts} [WARN ] [${scope}] ${message}\x1b[0m`, data);
+    } else {
+      console.warn(`\x1b[33m${ts} [WARN ] [${scope}] ${message}\x1b[0m`);
+    }
+  },
+  error(scope, message, error) {
+    if (!shouldLog('error')) return;
+    addLogEntry('error', scope, message, error);
+    const ts = formatTimestamp();
+    if (error !== undefined) {
+      console.error(`\x1b[31m${ts} [ERROR] [${scope}] ${message}\x1b[0m`, error);
+    } else {
+      console.error(`\x1b[31m${ts} [ERROR] [${scope}] ${message}\x1b[0m`);
+    }
+  },
+};
 
 // ============================================================================
 // AUTH MODULE IMPORTS (Dynamic import for ES modules)
@@ -58,11 +191,11 @@ async function getAuthModule() {
     function ensureAuthDirectories() {
       if (!fs.existsSync(AUTH_DIR)) {
         fs.mkdirSync(AUTH_DIR, { recursive: true });
-        console.log(`[auth] Created auth directory: ${AUTH_DIR}`);
+        log.debug('AUTH', `Created auth directory: ${AUTH_DIR}`);
       }
       if (!fs.existsSync(BROWSER_PROFILE)) {
         fs.mkdirSync(BROWSER_PROFILE, { recursive: true });
-        console.log(`[auth] Created browser profile: ${BROWSER_PROFILE}`);
+        log.debug('AUTH', `Created browser profile: ${BROWSER_PROFILE}`);
       }
     }
     
@@ -87,13 +220,13 @@ async function getAuthModule() {
       
       const persistedCookies = Array.from(seen.values());
       fs.writeFileSync(COOKIES_FILE, JSON.stringify(persistedCookies, null, 2), 'utf-8');
-      console.log(`[auth] Saved ${persistedCookies.length} cookies`);
+      log.debug('AUTH', `Saved ${persistedCookies.length} cookies`);
     }
     
     // Restore cookies from file
     async function restoreCookies(context) {
       if (!fs.existsSync(COOKIES_FILE)) {
-        console.log('[auth] No cookies file found');
+        log.debug('AUTH', 'No cookies file found');
         return 0;
       }
       
@@ -103,15 +236,15 @@ async function getAuthModule() {
         const validCookies = cookies.filter(c => (c.expires ?? 0) > now);
         
         if (validCookies.length === 0) {
-          console.log('[auth] All cookies expired');
+          log.debug('AUTH', 'All cookies expired');
           return 0;
         }
         
         await context.addCookies(validCookies);
-        console.log(`[auth] Restored ${validCookies.length} cookies`);
+        log.debug('AUTH', `Restored ${validCookies.length} cookies`);
         return validCookies.length;
       } catch (e) {
-        console.warn(`[auth] Could not restore cookies: ${e.message}`);
+        log.warn('AUTH', `Could not restore cookies: ${e.message}`);
         return 0;
       }
     }
@@ -131,7 +264,7 @@ async function getAuthModule() {
       };
       
       fs.writeFileSync(SESSION_STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
-      console.log('[auth] Session state saved');
+      log.debug('AUTH', 'Session state saved');
     }
     
     // Check if auth cookies are present
@@ -165,7 +298,7 @@ async function getAuthModule() {
             result.sessionAgeHours = (Date.now() - lastValidated) / (1000 * 60 * 60);
           }
         } catch (e) {
-          console.warn(`[auth] Could not load session state: ${e.message}`);
+          log.warn('AUTH', `Could not load session state: ${e.message}`);
         }
       }
       
@@ -200,8 +333,8 @@ async function getAuthModule() {
     async function login(forceAuth = false) {
       ensureAuthDirectories();
       
-      console.log('[auth] Starting login flow...');
-      console.log(`[auth] Browser profile: ${BROWSER_PROFILE}`);
+      log.info('AUTH', 'Starting login flow...');
+      log.debug('AUTH', `Browser profile: ${BROWSER_PROFILE}`);
       
       let context;
       try {
@@ -212,6 +345,7 @@ async function getAuthModule() {
         });
       } catch (e) {
         if (e.message.includes('lock') || e.message.includes('already in use')) {
+          log.warn('AUTH', 'Browser profile locked - another instance is open');
           return {
             success: false,
             error: 'BROWSER_PROFILE_LOCKED',
@@ -230,24 +364,24 @@ async function getAuthModule() {
       const needsAuth = forceAuth || !(await hasAuthCookies(context));
       
       if (!needsAuth) {
-        console.log('[auth] Session already authenticated');
+        log.info('AUTH', 'Session already authenticated');
         await saveSessionState(context);
         await context.close();
         return { success: true, message: 'Session déjà authentifiée' };
       }
       
       // Navigate to login page
-      console.log('[auth] Authentication required - navigating to login...');
+      log.info('AUTH', 'Authentication required - navigating to login...');
       await page.goto(AUTH_TARGET.homeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       
       // Wait for authentication (max 3 minutes)
-      console.log('[auth] Waiting for authentication (timeout: 180s)...');
+      log.info('AUTH', 'Waiting for authentication (timeout: 180s)...');
       const startTime = Date.now();
       const timeoutMs = 180 * 1000;
       
       while (Date.now() - startTime < timeoutMs) {
         if (await hasAuthCookies(context)) {
-          console.log('[auth] Authentication successful!');
+          log.info('AUTH', 'Authentication successful!');
           await saveSessionState(context);
           await context.close();
           return { success: true, message: 'Connexion réussie!' };
@@ -256,7 +390,7 @@ async function getAuthModule() {
       }
       
       // Timeout
-      console.error('[auth] Authentication timeout');
+      log.error('AUTH', 'Authentication timeout');
       await context.close();
       return {
         success: false,
@@ -293,7 +427,7 @@ async function getAuthModule() {
     
     return authModule;
   } catch (e) {
-    console.error('[auth] Failed to initialize auth module:', e);
+    log.error('AUTH', 'Failed to initialize auth module', e);
     throw e;
   }
 }
@@ -324,13 +458,24 @@ function createWindow() {
   
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+  
+  // DevTools controlled by SHOW_DEVTOOLS env variable
+  if (ENV_CONFIG.SHOW_DEVTOOLS) {
+    mainWindow.webContents.openDevTools();
+    log.debug('SYSTEM', 'DevTools opened (SHOW_DEVTOOLS=true)');
   }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+  
+  log.info('SYSTEM', 'Window created', {
+    env: ENV_CONFIG.ENV,
+    devTools: ENV_CONFIG.SHOW_DEVTOOLS,
+    logLevel: ENV_CONFIG.LOG_LEVEL
   });
 }
 
@@ -344,7 +489,7 @@ ipcMain.handle('auth:getStatus', async () => {
     const auth = await getAuthModule();
     return auth.getSessionStatus();
   } catch (e) {
-    console.error('[IPC] auth:getStatus error:', e);
+    log.error('IPC', 'auth:getStatus error', e);
     return {
       isConnected: false,
       error: e.message,
@@ -355,10 +500,11 @@ ipcMain.handle('auth:getStatus', async () => {
 // Login - opens browser for authentication
 ipcMain.handle('auth:login', async (event, forceAuth = false) => {
   try {
+    log.debug('IPC', 'auth:login called', { forceAuth });
     const auth = await getAuthModule();
     return await auth.login(forceAuth);
   } catch (e) {
-    console.error('[IPC] auth:login error:', e);
+    log.error('IPC', 'auth:login error', e);
     return {
       success: false,
       error: 'UNKNOWN',
@@ -370,10 +516,11 @@ ipcMain.handle('auth:login', async (event, forceAuth = false) => {
 // Ensure session is valid
 ipcMain.handle('auth:ensureSession', async () => {
   try {
+    log.debug('IPC', 'auth:ensureSession called');
     const auth = await getAuthModule();
     return await auth.ensureSession();
   } catch (e) {
-    console.error('[IPC] auth:ensureSession error:', e);
+    log.error('IPC', 'auth:ensureSession error', e);
     return {
       success: false,
       error: 'UNKNOWN',
@@ -387,11 +534,46 @@ ipcMain.handle('app:getUserDataPath', () => {
   return app.getPath('userData');
 });
 
+// Get environment config (for UI conditional display)
+ipcMain.handle('app:getEnvConfig', () => {
+  return ENV_CONFIG;
+});
+
+// ============================================================================
+// LOG IPC HANDLERS
+// ============================================================================
+
+// Get all buffered logs
+ipcMain.handle('logs:getBuffer', () => {
+  return logBuffer;
+});
+
+// Clear log buffer
+ipcMain.handle('logs:clear', () => {
+  logBuffer.length = 0;
+  log.debug('SYSTEM', 'Log buffer cleared');
+  return { success: true };
+});
+
+// Add log from renderer process
+ipcMain.handle('logs:add', (event, { level, scope, message, data }) => {
+  if (log[level]) {
+    log[level](scope, message, data);
+  }
+  return { success: true };
+});
+
 // ============================================================================
 // APP LIFECYCLE
 // ============================================================================
 
 app.whenReady().then(() => {
+  log.info('SYSTEM', 'App ready', {
+    version: app.getVersion(),
+    userData: app.getPath('userData'),
+    env: ENV_CONFIG.ENV
+  });
+  
   createWindow();
 
   app.on('activate', () => {
@@ -402,6 +584,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  log.debug('SYSTEM', 'All windows closed');
   if (process.platform !== 'darwin') {
     app.quit();
   }

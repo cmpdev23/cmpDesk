@@ -1087,3 +1087,174 @@ if (!status.isConnected) {
 - [ ] Implement session refresh mechanism
 - [ ] Add "Déconnecter" button for manual logout
 - [ ] Show last login time in UI
+
+---
+
+## Milestone — Debug Logging System (2026-04-03)
+
+### Overview
+
+Implemented a centralized, environment-aware logging system for cmpDesk.
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `.env.example` | Environment configuration template |
+| `src/lib/logger.ts` | Central logging module (renderer process) |
+| `electron/main.js` | Updated with structured logging (main process) |
+
+### Environment Variables
+
+Configure via `.env` file at project root:
+
+```env
+ENV=DEV               # DEV or PROD
+DEBUG_LOGS=true       # Enable/disable debug logs
+SHOW_DEVTOOLS=true    # Auto-open DevTools on start
+LOG_LEVEL=debug       # debug, info, warn, error
+```
+
+### Log Levels
+
+| Level | Priority | DEV | PROD |
+|-------|----------|-----|------|
+| debug | 0 | ✅ (if DEBUG_LOGS=true) | ❌ |
+| info | 1 | ✅ | ❌ |
+| warn | 2 | ✅ | ✅ |
+| error | 3 | ✅ | ✅ |
+
+### Scopes (Standardized)
+
+- `AUTH` — Authentication, login, session
+- `SESSION` — Session state management
+- `PLAYWRIGHT` — Browser automation
+- `API` — External API calls
+- `AURA` — Salesforce Aura framework
+- `XECM` — OpenText document management
+- `STORAGE` — File/database operations
+- `UI` — User interface events
+- `SYSTEM` — App lifecycle, window management
+- `IPC` — Electron IPC channels
+- `DB` — Database operations
+
+### Usage (Renderer Process)
+
+```typescript
+import { logDebug, logInfo, logWarn, logError, createScopedLogger } from '@/lib/logger';
+
+// Direct usage
+logDebug('AUTH', 'Session created', { userId: '123' });
+logInfo('API', 'Request sent', { endpoint: '/dossier' });
+logWarn('SESSION', 'Session expiring soon');
+logError('PLAYWRIGHT', 'Navigation failed', error);
+
+// Scoped logger (for modules)
+const log = createScopedLogger('AUTH');
+log.info('Login successful');
+log.error('Login failed', error);
+```
+
+### Usage (Main Process)
+
+The main process has its own logger implementation in `electron/main.js`:
+
+```javascript
+log.debug('AUTH', 'Created browser profile', { path });
+log.info('SYSTEM', 'Window created', { env, devTools });
+log.warn('IPC', 'Slow response detected');
+log.error('AUTH', 'Authentication timeout', error);
+```
+
+### Output Format
+
+```
+HH:MM:SS.mmm [LEVEL] [SCOPE] Message
+14:35:22.123 [DEBUG] [AUTH] Session created
+14:35:22.456 [INFO ] [API] Request sent { endpoint: '/dossier' }
+14:35:22.789 [ERROR] [PLAYWRIGHT] Navigation failed Error: timeout
+```
+
+### Sensitive Data Protection
+
+The logger automatically masks:
+
+**Field names** (case-insensitive):
+- `token`, `accessToken`, `refreshToken`
+- `password`, `secret`, `apiKey`
+- `cookie`, `cookies`, `authorization`
+- `sid`, `sessionId`, `fwuid`
+- `aura.token`, `aura.context`
+- `.ASPXAUTH`, `OTDSTicket`
+
+**Patterns** (in values):
+- JWT tokens (`eyJ...`)
+- OTDS tokens (`*OTDSSSO*...`)
+- Basic auth headers
+- Bearer tokens
+
+### Debug Panel (Prepared)
+
+The logger stores entries in memory for future Debug Panel UI:
+
+```typescript
+import { getLogBuffer, filterLogs, clearLogBuffer } from '@/lib/logger';
+
+// Get all logs
+const logs = getLogBuffer();
+
+// Filter logs
+const errors = filterLogs({ level: 'error', limit: 50 });
+const authLogs = filterLogs({ scope: 'AUTH', since: new Date(Date.now() - 3600000) });
+
+// Clear buffer
+clearLogBuffer();
+```
+
+### DevTools Control
+
+DevTools is now controlled by `SHOW_DEVTOOLS` environment variable, not hardcoded:
+
+```javascript
+// electron/main.js
+if (ENV_CONFIG.SHOW_DEVTOOLS) {
+  mainWindow.webContents.openDevTools();
+}
+```
+
+### Rules
+
+- **NEVER use console.log directly** — Use logger functions
+- **NEVER log sensitive data** — Logger masks known patterns but be careful
+- **Use appropriate level** — debug for verbose, info for milestones, warn for issues, error for failures
+- **Use consistent scopes** — Stick to the standardized list above
+- **Include context data** — Pass structured data, not string concatenation
+
+### Anti-patterns
+
+```typescript
+// ❌ BAD: Direct console.log
+console.log('[auth] Session created');
+
+// ✅ GOOD: Logger with scope
+logInfo('AUTH', 'Session created');
+
+// ❌ BAD: String concatenation
+logInfo('AUTH', 'User ' + userId + ' logged in');
+
+// ✅ GOOD: Structured data
+logInfo('AUTH', 'User logged in', { userId });
+
+// ❌ BAD: Logging sensitive data
+logDebug('AUTH', 'Token received', { token: actualToken });
+
+// ✅ GOOD: Logger masks automatically, but avoid passing raw tokens
+logDebug('AUTH', 'Token received', { tokenLength: token.length });
+```
+
+### Next Steps
+
+- [ ] Migrate `src/lib/auth/*.ts` console.log calls to logger
+- [ ] Add Debug Panel UI component
+- [ ] Add log export functionality
+- [ ] Add log level toggle in Settings UI

@@ -36,11 +36,57 @@ export interface AuthAPI {
   ensureSession: () => Promise<EnsureSessionResult>;
 }
 
+// ============================================================================
+// ENV CONFIG
+// ============================================================================
+
+export interface EnvConfig {
+  ENV: 'DEV' | 'PROD';
+  DEBUG_LOGS: boolean;
+  SHOW_DEVTOOLS: boolean;
+  LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
+}
+
+// ============================================================================
+// LOGS API
+// ============================================================================
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  scope: string;
+  message: string;
+  data?: string;
+}
+
+export interface LogsAPI {
+  /** Get all buffered log entries from main process */
+  getBuffer: () => Promise<LogEntry[]>;
+  
+  /** Clear the log buffer */
+  clear: () => Promise<{ success: boolean }>;
+  
+  /** Add a log entry from renderer to main process */
+  add: (level: LogLevel, scope: string, message: string, data?: unknown) => Promise<{ success: boolean }>;
+  
+  /** Subscribe to new log entries from main process */
+  onEntry: (callback: (entry: LogEntry) => void) => () => void;
+}
+
+// ============================================================================
+// ELECTRON API
+// ============================================================================
+
 export interface ElectronAPI {
   platform: 'win32' | 'darwin' | 'linux';
   getVersion: () => string;
   getUserDataPath: () => Promise<string>;
+  getEnvConfig: () => Promise<EnvConfig>;
   auth: AuthAPI;
+  logs: LogsAPI;
 }
 
 declare global {

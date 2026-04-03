@@ -5,9 +5,12 @@
  * 
  * Exposes secure APIs to the renderer process via contextBridge.
  * This is the ONLY way renderer can communicate with main process.
+ * 
+ * NOTE: Preload scripts MUST use CommonJS (require), not ESM (import).
+ * Electron preload context does not support ESM modules.
  */
 
-import { contextBridge, ipcRenderer } from 'electron';
+const { contextBridge, ipcRenderer } = require('electron');
 
 // ============================================================================
 // AUTH API
@@ -74,6 +77,52 @@ const appAPI = {
    * Get user data path (for debugging).
    */
   getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
+  
+  /**
+   * Get environment configuration.
+   * @returns {Promise<{ ENV: string, DEBUG_LOGS: boolean, SHOW_DEVTOOLS: boolean, LOG_LEVEL: string }>}
+   */
+  getEnvConfig: () => ipcRenderer.invoke('app:getEnvConfig'),
+};
+
+// ============================================================================
+// LOGS API
+// ============================================================================
+
+const logsAPI = {
+  /**
+   * Get all buffered log entries from main process.
+   * @returns {Promise<Array<{ id: string, timestamp: string, level: string, scope: string, message: string, data?: string }>>}
+   */
+  getBuffer: () => ipcRenderer.invoke('logs:getBuffer'),
+  
+  /**
+   * Clear the log buffer.
+   * @returns {Promise<{ success: boolean }>}
+   */
+  clear: () => ipcRenderer.invoke('logs:clear'),
+  
+  /**
+   * Add a log entry from renderer to main process.
+   * @param {string} level - Log level (debug, info, warn, error)
+   * @param {string} scope - Log scope (AUTH, API, etc.)
+   * @param {string} message - Log message
+   * @param {any} data - Optional data
+   * @returns {Promise<{ success: boolean }>}
+   */
+  add: (level, scope, message, data) =>
+    ipcRenderer.invoke('logs:add', { level, scope, message, data }),
+  
+  /**
+   * Subscribe to new log entries from main process.
+   * @param {Function} callback - Called with each new log entry
+   * @returns {Function} Unsubscribe function
+   */
+  onEntry: (callback) => {
+    const handler = (event, entry) => callback(entry);
+    ipcRenderer.on('log:entry', handler);
+    return () => ipcRenderer.removeListener('log:entry', handler);
+  },
 };
 
 // ============================================================================
@@ -83,7 +132,9 @@ const appAPI = {
 contextBridge.exposeInMainWorld('electronAPI', {
   ...appAPI,
   auth: authAPI,
+  logs: logsAPI,
 });
 
 console.log('🚀 cmpDesk preload script loaded');
 console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
+console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
