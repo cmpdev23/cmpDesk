@@ -16,23 +16,23 @@
  * Design System: shadcn/ui (radix-lyra preset)
  */
 
-import { ChangeEvent } from 'react';
-import { FormField } from '@/components/ui/form-field';
-import { InputField } from '@/components/ui/input-field';
-import { SelectField } from '@/components/ui/select-field';
+import { ChangeEvent } from "react";
+import { FormField } from "@/components/ui/form-field";
+import { InputField } from "@/components/ui/input-field";
+import { SelectField } from "@/components/ui/select-field";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
 import {
   OPPORTUNITY_CATEGORY_OPTIONS,
   PRODUCT_INTEREST_OPTIONS,
   SUBSIDIARY_OPTIONS,
-} from '../lib/picklists';
-import type { OpportunityStep1Data } from '../types';
+} from "../lib/picklists";
+import type { OpportunityStep1Data } from "../types";
 
 interface OpportunityFormStep1Props {
   data: OpportunityStep1Data;
@@ -66,7 +66,7 @@ export function OpportunityFormStep1({
     };
 
   return (
-    <Card className="border border-border ring-0">
+    <Card className="pl-1 border border-border ring-0">
       <CardHeader>
         <CardTitle>Étape 1 — Informations générales</CardTitle>
         <CardDescription>
@@ -76,8 +76,7 @@ export function OpportunityFormStep1({
 
       <CardContent>
         {/* Form grid — 2 columns on larger screens */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* ─── Catégorie de l'opportunité ─────────────────────────────── */}
           <FormField
             label="Catégorie de l'opportunité"
@@ -89,7 +88,7 @@ export function OpportunityFormStep1({
               id="opportunityCategory"
               name="opportunityCategory"
               value={data.opportunityCategory}
-              onValueChange={handleSelectChange('opportunityCategory')}
+              onValueChange={handleSelectChange("opportunityCategory")}
               options={OPPORTUNITY_CATEGORY_OPTIONS}
               placeholder="Sélectionner une catégorie..."
               required
@@ -106,7 +105,7 @@ export function OpportunityFormStep1({
               id="productInterest"
               name="productInterest"
               value={data.productInterest}
-              onValueChange={handleSelectChange('productInterest')}
+              onValueChange={handleSelectChange("productInterest")}
               options={PRODUCT_INTEREST_OPTIONS}
               placeholder="Sélectionner un produit..."
             />
@@ -123,7 +122,7 @@ export function OpportunityFormStep1({
               id="subsidiary"
               name="subsidiary"
               value={data.subsidiary}
-              onValueChange={handleSelectChange('subsidiary')}
+              onValueChange={handleSelectChange("subsidiary")}
               options={SUBSIDIARY_OPTIONS}
               placeholder="Sélectionner une filiale..."
               required
@@ -192,25 +191,21 @@ export function OpportunityFormStep1({
                 min={0}
                 step="0.01"
               />
-              <span className="absolute right-10 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">
+              <span className="absolute text-sm -translate-y-1/2 pointer-events-none right-10 top-1/2 text-muted-foreground">
                 $
               </span>
             </div>
           </FormField>
 
           {/* ─── Séparateur Contact ────────────────────────────────────── */}
-          <div className="col-span-1 md:col-span-2 pt-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <div className="col-span-1 pt-2 md:col-span-2">
+            <p className="text-xs font-medium tracking-wider uppercase text-muted-foreground">
               Coordonnées du client
             </p>
           </div>
 
           {/* ─── Téléphone ─────────────────────────────────────────────── */}
-          <FormField
-            label="Téléphone"
-            htmlFor="phone"
-            error={errors.phone}
-          >
+          <FormField label="Téléphone" htmlFor="phone" error={errors.phone}>
             <InputField
               id="phone"
               name="phone"
@@ -222,11 +217,7 @@ export function OpportunityFormStep1({
           </FormField>
 
           {/* ─── Courriel ──────────────────────────────────────────────── */}
-          <FormField
-            label="Courriel"
-            htmlFor="email"
-            error={errors.email}
-          >
+          <FormField label="Courriel" htmlFor="email" error={errors.email}>
             <InputField
               id="email"
               name="email"
@@ -236,7 +227,6 @@ export function OpportunityFormStep1({
               placeholder="Ex: client@exemple.com"
             />
           </FormField>
-
         </div>
       </CardContent>
     </Card>
