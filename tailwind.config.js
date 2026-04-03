@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ["class"],
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -8,31 +9,79 @@ export default {
     extend: {
       colors: {
         // ═══════════════════════════════════════════════════════════
-        // cmpDesk Design System - NordVPN Inspired Palette
+        // shadcn/ui CSS Variables
         // ═══════════════════════════════════════════════════════════
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+          3: "hsl(var(--chart-3))",
+          4: "hsl(var(--chart-4))",
+          5: "hsl(var(--chart-5))",
+        },
 
-        // Backgrounds
-        'app': '#0B0F14',           // Background global très dark
-        'surface': '#121821',        // Cartes / panels
-        'surface-light': '#1A2230', // Hover / variation
+        // ═══════════════════════════════════════════════════════════
+        // Legacy cmpDesk Design Tokens (mapped to shadcn variables)
+        // ═══════════════════════════════════════════════════════════
+        
+        // Backgrounds (legacy aliases)
+        'app': 'hsl(var(--background))',
+        'surface': 'hsl(var(--card))',
+        'surface-light': 'hsl(var(--accent))',
 
-        // Borders
-        'border': '#1F2A3A',
+        // Text colors (legacy aliases - prefixed with 'text-' in usage)
+        'text-primary': 'hsl(var(--foreground))',
+        'text-secondary': 'hsl(var(--muted-foreground))',
+        'text-muted': 'hsl(var(--muted-foreground) / 0.7)',
 
-        // Text colors (prefixed with 'text-' in usage becomes 'text-text-xxx')
-        'text-primary': '#E6EDF3',
-        'text-secondary': '#9FB0C3',
-        'text-muted': '#6B7C93',
+        // Accent (legacy aliases)
+        'primary-hover': 'hsl(var(--primary) / 0.8)',
+        'primary-soft': 'hsl(var(--accent))',
 
-        // Accent (bleu NordVPN style)
-        'primary': '#3B82F6',        // blue-500 proche
-        'primary-hover': '#2563EB',  // blue-600
-        'primary-soft': '#1E293B',   // fond léger bleu/gris
-
-        // Status colors
-        'success': '#22C55E',
-        'warning': '#F59E0B',
-        'danger': '#EF4444',
+        // Status colors (legacy aliases)
+        'success': 'hsl(var(--chart-2))',
+        'warning': 'hsl(var(--chart-3))',
+        'danger': 'hsl(var(--destructive))',
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      fontFamily: {
+        sans: ['Manrope Variable', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
     },
   },

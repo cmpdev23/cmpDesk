@@ -9,11 +9,15 @@
  * - Reconnect button when session expired
  * - Loading state during authentication
  * 
+ * Design System: shadcn/ui + NordVPN Inspired Dark Theme
+ * 
  * Usage:
  *   <AuthStatus />
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import type { AuthStatus as AuthStatusType } from '../../types/electron';
 
 // ============================================================================
@@ -122,38 +126,34 @@ export function AuthStatus() {
       {/* Status indicator */}
       <div className="flex items-center gap-2 mb-3">
         <StatusIndicator state={state.connectionState} />
-        <span className="text-text-secondary text-sm">
+        <span className="text-muted-foreground text-sm">
           {getStatusLabel(state.connectionState)}
         </span>
       </div>
 
       {/* Error message */}
       {state.error && (
-        <div className="mb-3 text-xs text-danger bg-danger/10 rounded px-2 py-1">
+        <div className="mb-3 text-xs text-destructive bg-destructive/10 rounded px-2 py-1">
           {state.error}
         </div>
       )}
 
       {/* Action button */}
       {state.connectionState !== 'connected' && state.connectionState !== 'checking' && (
-        <button
+        <Button
           onClick={() => handleLogin(state.connectionState === 'expired')}
           disabled={state.connectionState === 'logging-in'}
-          className={`
-            w-full px-3 py-2 rounded text-sm font-medium transition-colors
-            ${state.connectionState === 'logging-in'
-              ? 'bg-surface-light text-text-muted cursor-not-allowed'
-              : 'bg-primary hover:bg-primary-hover text-white cursor-pointer'
-            }
-          `}
+          variant={state.connectionState === 'logging-in' ? 'secondary' : 'default'}
+          className="w-full"
+          size="sm"
         >
           {getButtonLabel(state.connectionState)}
-        </button>
+        </Button>
       )}
 
       {/* Session info (when connected) */}
       {state.connectionState === 'connected' && state.status && (
-        <div className="text-xs text-text-muted space-y-1">
+        <div className="text-xs text-muted-foreground space-y-1">
           <div>Cookies: {state.status.cookieCount}</div>
           {state.status.lastValidated && (
             <div>
@@ -178,20 +178,20 @@ function StatusIndicator({ state }: StatusIndicatorProps) {
   const getColor = () => {
     switch (state) {
       case 'connected':
-        return 'bg-success';
+        return 'bg-chart-2';
       case 'expired':
-        return 'bg-warning';
+        return 'bg-chart-3';
       case 'logging-in':
       case 'checking':
-        return 'bg-warning animate-pulse';
+        return 'bg-chart-3 animate-pulse';
       case 'disconnected':
       default:
-        return 'bg-danger';
+        return 'bg-destructive';
     }
   };
 
   return (
-    <div className={`w-2.5 h-2.5 rounded-full ${getColor()}`} />
+    <div className={cn("w-2.5 h-2.5 rounded-full", getColor())} />
   );
 }
 

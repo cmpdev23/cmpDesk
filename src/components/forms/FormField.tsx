@@ -2,10 +2,11 @@
  * @file src/components/forms/FormField.tsx
  * @description Reusable form field wrapper with label and error display
  * 
- * Design System: NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui + NordVPN Inspired Dark Theme
  */
 
 import { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 
 interface FormFieldProps {
   label: string;
@@ -13,24 +14,32 @@ interface FormFieldProps {
   required?: boolean;
   error?: string;
   children: ReactNode;
+  className?: string;
 }
 
 /**
  * Form field wrapper providing consistent styling for labels and error messages
  */
-export function FormField({ label, htmlFor, required, error, children }: FormFieldProps) {
+export function FormField({ 
+  label, 
+  htmlFor, 
+  required, 
+  error, 
+  children,
+  className 
+}: FormFieldProps) {
   return (
-    <div className="space-y-1.5">
+    <div className={cn("space-y-1.5", className)}>
       <label 
         htmlFor={htmlFor}
-        className="block text-sm font-medium text-text-secondary"
+        className="block text-sm font-medium text-muted-foreground"
       >
         {label}
-        {required && <span className="text-danger ml-1">*</span>}
+        {required && <span className="text-destructive ml-1">*</span>}
       </label>
       {children}
       {error && (
-        <p className="text-sm text-danger">{error}</p>
+        <p className="text-sm text-destructive">{error}</p>
       )}
     </div>
   );

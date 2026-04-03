@@ -1,12 +1,85 @@
+@import "tw-animate-css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
-   cmpDesk Design System - NordVPN Inspired Dark Theme
+   cmpDesk Design System - shadcn/ui + NordVPN Inspired Dark Theme
    ═══════════════════════════════════════════════════════════════ */
 
-/* Reset et styles de base */
+@layer base {
+  :root {
+    /* shadcn CSS variables - Light theme (fallback) */
+    --background: 222 47% 6%;
+    --foreground: 210 40% 93%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 93%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 93%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 222 47% 14%;
+    --secondary-foreground: 210 40% 93%;
+    --muted: 222 47% 14%;
+    --muted-foreground: 210 40% 60%;
+    --accent: 222 47% 14%;
+    --accent-foreground: 210 40% 93%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 30% 18%;
+    --input: 220 30% 18%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+    
+    /* Chart colors */
+    --chart-1: 217 91% 60%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 262 83% 58%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 93%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 93%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 93%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 222 47% 14%;
+    --secondary-foreground: 210 40% 93%;
+    --muted: 222 47% 14%;
+    --muted-foreground: 210 40% 60%;
+    --accent: 222 47% 14%;
+    --accent-foreground: 210 40% 93%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 30% 18%;
+    --input: 220 30% 18%;
+    --ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Manrope Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Reset et styles de base
+   ═══════════════════════════════════════════════════════════════ */
+
 * {
   margin: 0;
   padding: 0;
@@ -17,13 +90,6 @@ html, body, #root {
   height: 100%;
   width: 100%;
   overflow: hidden;
-}
-
-body {
-  @apply bg-app text-text-primary;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -43,11 +109,11 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-app;
+  @apply bg-background;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-surface-light rounded;
+  @apply bg-muted rounded;
 }
 
 ::-webkit-scrollbar-thumb:hover {

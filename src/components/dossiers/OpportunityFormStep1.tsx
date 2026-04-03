@@ -13,7 +13,7 @@
  * + Phone (Téléphone) - workflow field
  * + Email (Courriel) - workflow field
  * 
- * Design System: NordVPN Inspired Dark Theme
+ * Design System: shadcn/ui + NordVPN Inspired Dark Theme
  */
 
 import { ChangeEvent } from 'react';
@@ -56,10 +56,10 @@ export function OpportunityFormStep1({
     <div className="space-y-6">
       {/* Section header */}
       <div className="pb-4 border-b border-border">
-        <h2 className="text-xl font-semibold text-text-primary">
+        <h2 className="text-xl font-semibold text-foreground">
           Étape 1 — Informations générales
         </h2>
-        <p className="mt-1 text-sm text-text-muted">
+        <p className="mt-1 text-sm text-muted-foreground">
           Remplissez les informations de base de l'opportunité
         </p>
       </div>
@@ -181,7 +181,7 @@ export function OpportunityFormStep1({
               min={0}
               step="0.01"
             />
-            <span className="absolute right-10 top-1/2 -translate-y-1/2 text-text-muted text-sm">
+            <span className="absolute right-10 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
               $
             </span>
           </div>
@@ -189,7 +189,7 @@ export function OpportunityFormStep1({
 
         {/* ─── Séparateur Contact ────────────────────────────────────── */}
         <div className="col-span-1 md:col-span-2 pt-4">
-          <h3 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Coordonnées du client
           </h3>
         </div>
