@@ -66,7 +66,7 @@ export function OpportunityFormStep1({
     };
 
   return (
-    <Card>
+    <Card className="border border-border ring-0">
       <CardHeader>
         <CardTitle>Étape 1 — Informations générales</CardTitle>
         <CardDescription>

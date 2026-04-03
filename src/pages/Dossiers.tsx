@@ -59,30 +59,27 @@ function Dossiers() {
       <div className="flex-1 overflow-auto">
         <div className="p-6">
           <div className="max-w-4xl">
-            {/* Form card */}
-            <div className="p-6 border rounded-lg bg-card border-border">
-              {/* Step 1 form */}
-              {currentStep === 1 && (
-                <OpportunityFormStep1
-                  data={step1Data}
-                  onChange={handleStep1Change}
-                  errors={errors}
-                />
-              )}
+            {/* Step forms — each step component owns its Card container */}
+            {currentStep === 1 && (
+              <OpportunityFormStep1
+                data={step1Data}
+                onChange={handleStep1Change}
+                errors={errors}
+              />
+            )}
 
-              {/* Placeholder for future steps */}
-              {currentStep === 2 && (
-                <div className="py-12 text-center text-muted-foreground">
-                  Étape 2 — Famille de produit (à venir)
-                </div>
-              )}
+            {/* Placeholder for future steps */}
+            {currentStep === 2 && (
+              <div className="py-12 text-center border rounded-lg bg-card border-border text-muted-foreground">
+                Étape 2 — Famille de produit (à venir)
+              </div>
+            )}
 
-              {currentStep === 3 && (
-                <div className="py-12 text-center text-muted-foreground">
-                  Étape 3 — Type de signature (à venir)
-                </div>
-              )}
-            </div>
+            {currentStep === 3 && (
+              <div className="py-12 text-center border rounded-lg bg-card border-border text-muted-foreground">
+                Étape 3 — Type de signature (à venir)
+              </div>
+            )}
 
             {/* Navigation buttons */}
             <div className="flex justify-between mt-6">
