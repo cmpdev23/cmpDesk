@@ -79,9 +79,9 @@ function AppLayout() {
                   </NavLink>
                 </li>
                 <li>
-                  <span className="block px-3 py-2 text-text-muted cursor-not-allowed rounded hover:bg-surface-light transition-colors">
+                  <NavLink to="/dossiers" className={getNavLinkClass('/dossiers')}>
                     Dossiers
-                  </span>
+                  </NavLink>
                 </li>
                 <li>
                   <span className="block px-3 py-2 text-text-muted cursor-not-allowed rounded hover:bg-surface-light transition-colors">

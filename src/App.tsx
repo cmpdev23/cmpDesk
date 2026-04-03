@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import AppLayout from './layout/AppLayout'
 import Home from './pages/Home'
 import Logs from './pages/Logs'
+import Dossiers from './pages/Dossiers'
 
 /**
  * Application principale cmpDesk
@@ -16,9 +17,9 @@ function App() {
     <Routes>
       <Route path="/" element={<AppLayout />}>
         <Route index element={<Home />} />
+        <Route path="dossiers" element={<Dossiers />} />
         <Route path="logs" element={<Logs />} />
         {/* Futures routes ici */}
-        {/* <Route path="dossiers" element={<Dossiers />} /> */}
         {/* <Route path="settings" element={<Settings />} /> */}
       </Route>
     </Routes>
