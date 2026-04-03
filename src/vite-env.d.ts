@@ -1,9 +1,11 @@
 /// <reference types="vite/client" />
 
-// Types pour l'API Electron exposée via preload
-interface Window {
-  electronAPI: {
-    platform: string;
-    getVersion: () => string;
-  };
+// Import electron types from the centralized definition
+import type { ElectronAPI } from './types/electron';
+
+// Extend Window interface with electronAPI
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI;
+  }
 }

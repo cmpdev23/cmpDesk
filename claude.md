@@ -959,3 +959,131 @@ Custom error classes with codes:
 - **ALWAYS call session.close()** — Use try/finally pattern
 - **Use domcontentloaded** — Not networkidle (SF Lightning)
 - **Check isOpen before operations** — Session must be opened first
+
+---
+
+## Milestone — Auth UI Integration (2026-04-03)
+
+### Overview
+
+Implemented complete login system with UI in the cmpDesk desktop application.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         RENDERER PROCESS                        │
+│  ┌──────────────────┐        ┌──────────────────────────────┐  │
+│  │ AuthStatus.tsx   │──IPC──▶│ window.electronAPI.auth      │  │
+│  │ (React Component)│        │ (preload.js)                 │  │
+│  └──────────────────┘        └──────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+                                       │
+                                       │ IPC Invoke
+                                       ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                          MAIN PROCESS                            │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ ipcMain.handle('auth:getStatus')                         │   │
+│  │ ipcMain.handle('auth:login')                             │   │
+│  │ ipcMain.handle('auth:ensureSession')                     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                              │                                   │
+│                              ▼                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ Auth Module (Playwright)                                 │   │
+│  │ - Persistent browser context (userData/auth/)            │   │
+│  │ - Cookie persistence (session → file → restore)          │   │
+│  │ - Session state tracking                                 │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Files Created/Modified
+
+| File | Type | Description |
+|------|------|-------------|
+| `electron/main.js` | Modified | Added IPC handlers for auth operations |
+| `electron/preload.js` | Modified | Exposed auth API to renderer |
+| `src/types/electron.d.ts` | Created | TypeScript types for Electron API |
+| `src/vite-env.d.ts` | Modified | Updated Window interface |
+| `src/components/sidebar/AuthStatus.tsx` | Created | Auth status UI component |
+| `src/layout/AppLayout.tsx` | Modified | Integrated AuthStatus in sidebar |
+
+### Auth Flow
+
+1. **On app load**: `AuthStatus.tsx` calls `window.electronAPI.auth.getStatus()` via IPC
+2. **Status check**: Main process reads session_state.json + cookies.json (no browser)
+3. **If disconnected**: UI shows 🔴 indicator + "Se connecter" button
+4. **On login click**: Main process launches Playwright with persistent context
+5. **Manual auth**: User completes login (email, password, 2FA) in browser
+6. **Detection**: Main process polls for auth cookies (`.ASPXAUTH`, `ee-authenticated`)
+7. **On success**: Cookies saved to file, browser closes, UI shows 🟢 indicator
+8. **Session reuse**: Future operations load cookies from file automatically
+
+### Session Persistence Strategy
+
+```
+userData/
+└── auth/
+    ├── browser_profile/    ← Playwright persistent context
+    ├── cookies.json        ← Explicit cookie persistence (24h expiry)
+    └── session_state.json  ← Metadata (lastValidated, authCookiesPresent)
+```
+
+**Critical**: Chromium does NOT persist session cookies (expires=-1) even with persistent context.
+We explicitly save all cookies to cookies.json with a 24-hour artificial expiration.
+
+### UI States
+
+| State | Indicator | Button | Description |
+|-------|-----------|--------|-------------|
+| `checking` | 🟡 pulse | None | Initial status check |
+| `connected` | 🟢 | None | Session valid |
+| `disconnected` | 🔴 | "Se connecter" | No session |
+| `expired` | 🟡 | "Reconnecter" | Session > 12h old |
+| `logging-in` | 🟡 pulse | Disabled | Browser open, waiting for auth |
+
+### IPC Channels
+
+| Channel | Direction | Parameters | Returns |
+|---------|-----------|------------|---------|
+| `auth:getStatus` | Renderer→Main | None | `AuthStatus` |
+| `auth:login` | Renderer→Main | `forceAuth?: boolean` | `LoginResult` |
+| `auth:ensureSession` | Renderer→Main | None | `EnsureSessionResult` |
+
+### Detection Strategy (Simple for now)
+
+Currently detects login via presence of auth cookies:
+- `.ASPXAUTH` (INALCO session)
+- `ee-authenticated` (INALCO flag)
+
+**TODO**: Enhance detection with:
+- API endpoint validation
+- Dashboard URL detection
+- Session token validation
+
+### Security
+
+- All credentials stay local (never logged, never transmitted)
+- Browser profile stored in userData (OS-protected)
+- Cookies file readable only by app process
+- No tokens hardcoded in source
+
+### Usage from Other Modules
+
+```typescript
+// In any automation script
+const status = await window.electronAPI.auth.getStatus();
+if (!status.isConnected) {
+    await window.electronAPI.auth.login();
+}
+// Now proceed with automation...
+```
+
+### Next Steps
+
+- [ ] Add Salesforce session detection (after INALCO login)
+- [ ] Implement session refresh mechanism
+- [ ] Add "Déconnecter" button for manual logout
+- [ ] Show last login time in UI

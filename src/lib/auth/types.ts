@@ -247,12 +247,12 @@ export interface AuthTargetConfig {
    * Cookie names that indicate successful authentication.
    * At least one must be present for session to be valid.
    */
-  authCookieNames: string[];
+  authCookieNames: readonly string[];
 
   /**
    * Domains where auth cookies should be present.
    */
-  authDomains: string[];
+  authDomains: readonly string[];
 }
 
 /**

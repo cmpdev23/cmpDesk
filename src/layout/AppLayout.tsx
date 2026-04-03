@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import { AuthStatus } from "../components/sidebar/AuthStatus";
 
 /**
  * Layout global de l'application cmpDesk
@@ -15,6 +16,8 @@ import { Outlet } from "react-router-dom";
  * │          │                                  │
  * │          │       <Outlet /> ← pages         │
  * │          │                                  │
+ * │──────────│                                  │
+ * │AuthStatus│                                  │
  * └──────────┴──────────────────────────────────┘
  */
 function AppLayout() {
@@ -32,6 +35,7 @@ function AppLayout() {
         <div className="flex flex-1 min-h-0">
           {/* Sidebar - navigation latérale */}
           <aside className="w-56 bg-surface border-r border-border flex flex-col shrink-0">
+            {/* Navigation */}
             <nav className="flex-1 p-4">
               <ul className="space-y-1">
                 <li>
@@ -54,9 +58,9 @@ function AppLayout() {
                 </li>
               </ul>
             </nav>
-            <div className="p-4 text-text-muted text-xs border-t border-border">
-              cmpDesk Desktop
-            </div>
+            
+            {/* Auth Status - bottom of sidebar */}
+            <AuthStatus />
           </aside>
 
           {/* Zone de contenu principale */}

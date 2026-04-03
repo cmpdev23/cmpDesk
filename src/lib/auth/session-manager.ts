@@ -386,7 +386,7 @@ export class SessionManager {
    * Execute JavaScript in the page context.
    *
    * @param pageFunction - Function to execute
-   * @param args - Arguments to pass to the function
+   * @param arg - Argument to pass to the function
    *
    * @returns Result of the function
    *
@@ -394,11 +394,13 @@ export class SessionManager {
    *   const result = await session.evaluate(() => document.title);
    *   const result = await session.evaluate((x) => x * 2, 21);
    */
-  async evaluate<R, Args extends unknown[]>(
-    pageFunction: (...args: Args) => R | Promise<R>,
-    ...args: Args
-  ): Promise<R> {
-    return this.page.evaluate(pageFunction, ...args);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async evaluate<R>(pageFunction: () => R | Promise<R>): Promise<R>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async evaluate<R, Arg>(pageFunction: (arg: Arg) => R | Promise<R>, arg: Arg): Promise<R>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async evaluate<R, Arg>(pageFunction: any, arg?: Arg): Promise<R> {
+    return this.page.evaluate(pageFunction, arg);
   }
 }
 
