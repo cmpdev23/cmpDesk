@@ -63,3 +63,5 @@ scripts/seeds/files/
 dist/
 dist-electron/
 *.local
+
+model/
