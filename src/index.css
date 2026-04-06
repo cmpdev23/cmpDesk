@@ -84,6 +84,11 @@
     @apply border-border;
     outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
   }
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
   body {
     @apply bg-background text-foreground;
   }

@@ -137,8 +137,12 @@ function AppLayout() {
             <span className="ml-auto text-muted-foreground text-sm">v0.1.0</span>
           </header>
 
-          {/* Page content — use a div, SidebarInset is already <main> */}
-          <div className="flex-1 bg-background overflow-auto">
+          {/*
+            Page content container — fills remaining space after topbar.
+            - min-h-0: Required for flex child to respect overflow
+            - SidebarInset already has bg-background, no need to repeat
+          */}
+          <div className="flex-1 min-h-0 overflow-auto">
             <Outlet />
           </div>
         </SidebarInset>
