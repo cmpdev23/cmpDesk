@@ -3,8 +3,9 @@
  * @description Page de création de dossier (Opportunity)
  *
  * Multi-step form for creating Opportunities in Salesforce.
- * - Step 1: Informations générales (Opportunity)
- * - Step 2: Informations du dossier (Case)
+ * - Step 1: Infos Compte (Account contact information)
+ * - Step 2: Informations générales (Opportunity)
+ * - Step 3: Famille de produit (Case)
  *
  * DEV MODE: Validation is bypassed — can navigate freely between steps.
  *
@@ -16,13 +17,15 @@
 
 import { useState } from 'react';
 import {
+  OpportunityFormStepCompte,
   OpportunityFormStep1,
   OpportunityFormStep2,
+  DEFAULT_ACCOUNT_DATA,
   DEFAULT_STEP1_DATA,
   DEFAULT_STEP2_DATA,
   DossierPageHeader,
 } from '@/modules/dossiers';
-import type { OpportunityStep1Data, CaseStep2Data } from '@/modules/dossiers';
+import type { AccountStepData, OpportunityStep1Data, CaseStep2Data } from '@/modules/dossiers';
 import { Button } from '@/components/ui/button';
 
 // DEV mode flag — skip validation when true
@@ -37,17 +40,39 @@ function Dossiers() {
   const totalSteps = 3; // Total steps as per docs
 
   // Form data state
+  const [accountData, setAccountData] = useState<AccountStepData>(DEFAULT_ACCOUNT_DATA);
   const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
   const [step2Data, setStep2Data] = useState<CaseStep2Data>(DEFAULT_STEP2_DATA);
 
   // Form errors (will be used for validation)
+  const [accountErrors, setAccountErrors] = useState<Record<string, string>>({});
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
   const [step2Errors, setStep2Errors] = useState<Record<string, string>>({});
 
   // ─── Validation Functions ─────────────────────────────────────────────────────
 
   /**
-   * Validate Step 1 required fields.
+   * Validate Account step required fields.
+   * Returns true if valid or in DEV mode.
+   */
+  const validateAccount = (): boolean => {
+    if (IS_DEV) return true; // Skip validation in DEV mode
+
+    const errors: Record<string, string> = {};
+
+    if (!accountData.firstName) {
+      errors.firstName = 'Le prénom est requis';
+    }
+    if (!accountData.lastName) {
+      errors.lastName = 'Le nom est requis';
+    }
+
+    setAccountErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  /**
+   * Validate Step 1 required fields (Informations générales).
    * Returns true if valid or in DEV mode.
    */
   const validateStep1 = (): boolean => {
@@ -67,7 +92,7 @@ function Dossiers() {
   };
 
   /**
-   * Validate Step 2 required fields.
+   * Validate Step 2 required fields (Famille de produit).
    * Returns true if valid or in DEV mode.
    */
   const validateStep2 = (): boolean => {
@@ -93,8 +118,10 @@ function Dossiers() {
 
     // Validate current step (unless DEV mode)
     if (currentStep === 1) {
-      isValid = validateStep1();
+      isValid = validateAccount();
     } else if (currentStep === 2) {
+      isValid = validateStep1();
+    } else if (currentStep === 3) {
       isValid = validateStep2();
     }
 
@@ -111,23 +138,36 @@ function Dossiers() {
 
   const handleSubmit = () => {
     // Final submission — validate all steps unless DEV mode
+    const accountValid = validateAccount();
     const step1Valid = validateStep1();
     const step2Valid = validateStep2();
 
-    if (!step1Valid) {
+    if (!accountValid) {
       setCurrentStep(1);
       return;
     }
-    if (!step2Valid) {
+    if (!step1Valid) {
       setCurrentStep(2);
+      return;
+    }
+    if (!step2Valid) {
+      setCurrentStep(3);
       return;
     }
 
     // TODO: Submit to Salesforce API
-    console.log('Submitting form data:', { step1Data, step2Data });
+    console.log('Submitting form data:', { accountData, step1Data, step2Data });
   };
 
   // ─── Form Data Handlers ───────────────────────────────────────────────────────
+
+  const handleAccountChange = (data: AccountStepData) => {
+    setAccountData(data);
+    // Clear errors when user modifies data
+    if (Object.keys(accountErrors).length > 0) {
+      setAccountErrors({});
+    }
+  };
 
   const handleStep1Change = (data: OpportunityStep1Data) => {
     setStep1Data(data);
@@ -163,6 +203,14 @@ function Dossiers() {
           <div className="max-w-4xl">
             {/* Step forms — each step component owns its Card container */}
             {currentStep === 1 && (
+              <OpportunityFormStepCompte
+                data={accountData}
+                onChange={handleAccountChange}
+                errors={accountErrors}
+              />
+            )}
+
+            {currentStep === 2 && (
               <OpportunityFormStep1
                 data={step1Data}
                 onChange={handleStep1Change}
@@ -170,18 +218,12 @@ function Dossiers() {
               />
             )}
 
-            {currentStep === 2 && (
+            {currentStep === 3 && (
               <OpportunityFormStep2
                 data={step2Data}
                 onChange={handleStep2Change}
                 errors={step2Errors}
               />
-            )}
-
-            {currentStep === 3 && (
-              <div className="py-12 text-center border rounded-lg bg-card border-border text-muted-foreground">
-                Étape 3 — Récapitulatif (à venir)
-              </div>
             )}
 
             {/* Navigation buttons */}
@@ -208,7 +250,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ step1Data, step2Data }, null, 2)}
+                  {JSON.stringify({ accountData, step1Data, step2Data }, null, 2)}
                 </pre>
               </details>
             )}

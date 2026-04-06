@@ -1,6 +1,6 @@
 /**
  * @file src/modules/dossiers/components/OpportunityFormStep1.tsx
- * @description Step 1 of the Opportunity creation form — Informations générales
+ * @description Step 2 of the Opportunity creation form — Informations générales
  *
  * Fields included (from docs/opportunity.md):
  * - Opportunity_Category__c (Catégorie de l'opportunité)
@@ -10,8 +10,6 @@
  * - Contract_Number__c (Numéro de contrat)
  * - Transaction_Date__c (Date de transaction)
  * - Annual_Premium__c (Prime annuelle)
- * + Phone (Téléphone) — workflow field
- * + Email (Courriel) — workflow field
  *
  * Design System: shadcn/ui (radix-lyra preset)
  */
@@ -68,7 +66,7 @@ export function OpportunityFormStep1({
   return (
     <Card className="pl-1 border border-border ring-0">
       <CardHeader>
-        <CardTitle>Étape 1 — Informations générales</CardTitle>
+        <CardTitle>Étape 2 — Informations générales</CardTitle>
         <CardDescription>
           Remplissez les informations de base de l'opportunité
         </CardDescription>
@@ -195,37 +193,6 @@ export function OpportunityFormStep1({
                 $
               </span>
             </div>
-          </FormField>
-
-          {/* ─── Séparateur Contact ────────────────────────────────────── */}
-          <div className="col-span-1 pt-2 md:col-span-2">
-            <p className="text-xs font-medium tracking-wider uppercase text-muted-foreground">
-              Coordonnées du client
-            </p>
-          </div>
-
-          {/* ─── Téléphone ─────────────────────────────────────────────── */}
-          <FormField label="Téléphone" htmlFor="phone" error={errors.phone}>
-            <InputField
-              id="phone"
-              name="phone"
-              type="tel"
-              value={data.phone}
-              onChange={handleInputChange}
-              placeholder="Ex: 514-555-1234"
-            />
-          </FormField>
-
-          {/* ─── Courriel ──────────────────────────────────────────────── */}
-          <FormField label="Courriel" htmlFor="email" error={errors.email}>
-            <InputField
-              id="email"
-              name="email"
-              type="email"
-              value={data.email}
-              onChange={handleInputChange}
-              placeholder="Ex: client@exemple.com"
-            />
           </FormField>
         </div>
       </CardContent>

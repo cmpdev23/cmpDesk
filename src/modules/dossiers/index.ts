@@ -10,19 +10,21 @@
  */
 
 // Components
+export { OpportunityFormStepCompte } from './components/OpportunityFormStepCompte';
 export { OpportunityFormStep1 } from './components/OpportunityFormStep1';
 export { OpportunityFormStep2 } from './components/OpportunityFormStep2';
 export { DossierPageHeader } from './components/DossierPageHeader';
 
 // Types
 export type {
+  AccountStepData,
   OpportunityStep1Data,
   CaseStep2Data,
   OpportunityFormData,
   ValidationError,
   ValidationResult,
 } from './types';
-export { DEFAULT_STEP1_DATA, DEFAULT_STEP2_DATA } from './types';
+export { DEFAULT_ACCOUNT_DATA, DEFAULT_STEP1_DATA, DEFAULT_STEP2_DATA } from './types';
 
 // Picklists — Opportunity (Step 1)
 export {

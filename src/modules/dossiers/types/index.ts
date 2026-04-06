@@ -8,7 +8,17 @@
 // ─── Form Data Types ──────────────────────────────────────────────────────────
 
 /**
- * Step 1 form data - Informations générales
+ * Step 1 form data - Infos Compte (client contact information)
+ */
+export interface AccountStepData {
+  firstName: string; // Prénom
+  lastName: string; // Nom
+  phone: string; // Téléphone
+  email: string; // Email
+}
+
+/**
+ * Step 2 form data - Informations générales
  */
 export interface OpportunityStep1Data {
   // Picklist fields
@@ -25,10 +35,6 @@ export interface OpportunityStep1Data {
 
   // Currency field
   annualPremium: string; // Annual_Premium__c (string for input, converted to number on submit)
-
-  // Contact fields (workflow fields — not direct Salesforce Opportunity fields)
-  phone: string; // Client phone
-  email: string; // Client email
 }
 
 /**
@@ -53,11 +59,18 @@ export interface CaseStep2Data {
  * Full Opportunity form data (all steps combined).
  * Extended as we add more steps.
  */
-export interface OpportunityFormData extends OpportunityStep1Data, CaseStep2Data {
+export interface OpportunityFormData extends AccountStepData, OpportunityStep1Data, CaseStep2Data {
   // Future steps can be added here
 }
 
 // ─── Default Values ───────────────────────────────────────────────────────────
+
+export const DEFAULT_ACCOUNT_DATA: AccountStepData = {
+  firstName: '',
+  lastName: '',
+  phone: '',
+  email: '',
+};
 
 export const DEFAULT_STEP1_DATA: OpportunityStep1Data = {
   opportunityCategory: '',
@@ -67,8 +80,6 @@ export const DEFAULT_STEP1_DATA: OpportunityStep1Data = {
   contractNumber: '',
   transactionDate: '',
   annualPremium: '',
-  phone: '',
-  email: '',
 };
 
 export const DEFAULT_STEP2_DATA: CaseStep2Data = {

@@ -9,9 +9,9 @@
 import { Stepper } from "@/components/ui/stepper";
 
 const DOSSIER_STEPS = [
+  { title: "Compte" },
   { title: "Informations générales" },
   { title: "Famille de produit" },
-  { title: "Type de signature" },
 ];
 
 interface DossierPageHeaderProps {
