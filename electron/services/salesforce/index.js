@@ -60,13 +60,37 @@ function clearCredentials() {
 // ============================================================================
 
 /**
- * Search for an account using multiple strategies
+ * Convert raw search records to candidate format
+ * @param {Array} records - Raw search records
+ * @param {number} limit - Max candidates to return
+ * @returns {Array<{id: string, name: string, phone?: string, email?: string, city?: string}>}
+ */
+function recordsToCandidates(records, limit = 5) {
+  if (!records || !Array.isArray(records)) return [];
+  
+  return records.slice(0, limit).map(record => ({
+    id: record.id || record.recordId,
+    name: record.name || record.primaryField?.value || record.title,
+    phone: record.phone || null,
+    email: record.email || null,
+    city: record.city || null,
+  }));
+}
+
+/**
+ * Search for an account using cascading strategies:
+ * 1. Phone (if provided)
+ * 2. Email fallback (if phone found nothing)
+ * 3. Name fallback (if email found nothing)
+ *
+ * When multiple results found, returns up to 5 candidates for user selection.
+ *
  * @param {Object} params - Search parameters
  * @param {string} params.phone - Phone number to search
  * @param {string} params.email - Email to search
  * @param {string} params.firstName - First name
  * @param {string} params.lastName - Last name
- * @returns {Promise<{success: boolean, accountId?: string, accountName?: string, message: string}>}
+ * @returns {Promise<{found: boolean, accountId?: string, accountName?: string, matchedBy?: string, candidates?: Array, multipleResults?: boolean, message?: string}>}
  */
 async function searchAccount({ phone, email, firstName, lastName }) {
   log.info('SALESFORCE', 'Account search initiated', { phone, email, firstName, lastName });
@@ -76,7 +100,8 @@ async function searchAccount({ phone, email, firstName, lastName }) {
   
   if (!success || !page) {
     return {
-      success: false,
+      found: false,
+      error: 'SESSION_REQUIRED',
       message: 'Not authenticated',
     };
   }
@@ -86,12 +111,15 @@ async function searchAccount({ phone, email, firstName, lastName }) {
   
   if (!credentials) {
     return {
-      success: false,
+      found: false,
+      error: 'CREDENTIALS_CAPTURE_FAILED',
       message: 'Failed to capture Aura credentials',
     };
   }
   
-  // Strategy 1: Search by phone with various formats
+  // ══════════════════════════════════════════════════════════════════════════
+  // Strategy 1: Search by phone (primary)
+  // ══════════════════════════════════════════════════════════════════════════
   if (phone) {
     const phoneFormats = [
       phone,
@@ -107,97 +135,167 @@ async function searchAccount({ phone, email, firstName, lastName }) {
       // Try standard search
       const result = await search.searchByTerm(page, credentials, format);
       
-      if (result.found) {
+      if (result.found && result.records && result.records.length > 0) {
+        const candidates = recordsToCandidates(result.records, 5);
+        
+        // Multiple results → let user choose
+        if (candidates.length > 1) {
+          log.info('SALESFORCE', `Multiple accounts found by phone: ${candidates.length}`);
+          return {
+            found: true,
+            multipleResults: true,
+            matchedBy: 'phone',
+            candidates,
+            message: `${candidates.length} comptes trouvés par téléphone`,
+          };
+        }
+        
+        // Single result
         return {
-          success: true,
+          found: true,
           accountId: result.accountId,
           accountName: result.accountName,
-          message: 'Account found by phone',
-          records: result.records,
+          matchedBy: 'phone',
+          message: 'Compte trouvé par téléphone',
         };
       }
       
-      // Try SOQL search
+      // Try SOQL search for exact phone match
       const soqlResult = await search.searchBySOQL(page, credentials, 'Phone', format);
       
-      if (soqlResult.found) {
+      if (soqlResult.found && soqlResult.account) {
         return {
-          success: true,
+          found: true,
           accountId: soqlResult.account.id,
           accountName: soqlResult.account.name,
-          message: 'Account found by phone (SOQL)',
-          account: soqlResult.account,
+          matchedBy: 'phone',
+          message: 'Compte trouvé par téléphone (exact)',
         };
       }
     }
+    
+    log.debug('SALESFORCE', 'Phone search found nothing, trying email fallback...');
   }
   
-  // Strategy 2: Search by email
+  // ══════════════════════════════════════════════════════════════════════════
+  // Strategy 2: Search by email (fallback if phone found nothing)
+  // ══════════════════════════════════════════════════════════════════════════
   if (email) {
     log.debug('SALESFORCE', `Searching by email: ${email}`);
     
     const result = await search.searchByTerm(page, credentials, email);
     
-    if (result.found) {
+    if (result.found && result.records && result.records.length > 0) {
+      const candidates = recordsToCandidates(result.records, 5);
+      
+      // Multiple results → let user choose
+      if (candidates.length > 1) {
+        log.info('SALESFORCE', `Multiple accounts found by email: ${candidates.length}`);
+        return {
+          found: true,
+          multipleResults: true,
+          matchedBy: 'email',
+          candidates,
+          message: `${candidates.length} comptes trouvés par email`,
+        };
+      }
+      
+      // Single result
       return {
-        success: true,
+        found: true,
         accountId: result.accountId,
         accountName: result.accountName,
-        message: 'Account found by email',
-        records: result.records,
+        matchedBy: 'email',
+        message: 'Compte trouvé par email',
       };
     }
     
-    // Try SOQL
+    // Try SOQL for exact email match
     const soqlResult = await search.searchBySOQL(page, credentials, 'PersonEmail', email);
     
-    if (soqlResult.found) {
+    if (soqlResult.found && soqlResult.account) {
       return {
-        success: true,
+        found: true,
         accountId: soqlResult.account.id,
         accountName: soqlResult.account.name,
-        message: 'Account found by email (SOQL)',
-        account: soqlResult.account,
+        matchedBy: 'email',
+        message: 'Compte trouvé par email (exact)',
       };
     }
+    
+    log.debug('SALESFORCE', 'Email search found nothing, trying name fallback...');
   }
   
-  // Strategy 3: Search by name
+  // ══════════════════════════════════════════════════════════════════════════
+  // Strategy 3: Search by name (fallback if phone & email found nothing)
+  // ══════════════════════════════════════════════════════════════════════════
   if (firstName || lastName) {
     const nameTerm = [firstName, lastName].filter(Boolean).join(' ');
     log.debug('SALESFORCE', `Searching by name: ${nameTerm}`);
     
     const result = await search.searchByTerm(page, credentials, nameTerm);
     
-    if (result.found) {
+    if (result.found && result.records && result.records.length > 0) {
+      const candidates = recordsToCandidates(result.records, 5);
+      
+      // Multiple results → let user choose
+      if (candidates.length > 1) {
+        log.info('SALESFORCE', `Multiple accounts found by name: ${candidates.length}`);
+        return {
+          found: true,
+          multipleResults: true,
+          matchedBy: 'name',
+          candidates,
+          message: `${candidates.length} comptes trouvés par nom`,
+        };
+      }
+      
+      // Single result
       return {
-        success: true,
+        found: true,
         accountId: result.accountId,
         accountName: result.accountName,
-        message: 'Account found by name',
-        records: result.records,
+        matchedBy: 'name',
+        message: 'Compte trouvé par nom',
       };
     }
     
-    // Try broader search
+    // Try broader search without filter
     const broadResult = await search.searchByTermNoFilter(page, credentials, nameTerm);
     
-    if (broadResult.found) {
+    if (broadResult.found && broadResult.records && broadResult.records.length > 0) {
+      const candidates = recordsToCandidates(broadResult.records, 5);
+      
+      // Multiple results → let user choose
+      if (candidates.length > 1) {
+        log.info('SALESFORCE', `Multiple accounts found by name (broad): ${candidates.length}`);
+        return {
+          found: true,
+          multipleResults: true,
+          matchedBy: 'name',
+          candidates,
+          message: `${candidates.length} comptes trouvés par nom`,
+        };
+      }
+      
+      // Single result
       return {
-        success: true,
+        found: true,
         accountId: broadResult.accountId,
         accountName: broadResult.accountName,
-        message: 'Account found by name (broad search)',
-        records: broadResult.records,
+        matchedBy: 'name',
+        message: 'Compte trouvé par nom',
       };
     }
   }
   
-  // No account found
-  log.info('SALESFORCE', 'No account found');
+  // ══════════════════════════════════════════════════════════════════════════
+  // No results found with any strategy
+  // ══════════════════════════════════════════════════════════════════════════
+  log.info('SALESFORCE', 'No account found with any search strategy');
   return {
-    success: false,
-    message: 'No account found with the provided criteria',
+    found: false,
+    message: 'Aucun compte trouvé avec les critères fournis',
   };
 }
 

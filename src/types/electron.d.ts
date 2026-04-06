@@ -119,15 +119,35 @@ export interface AccountSearchParams {
   lastName?: string;
 }
 
+/** Single account candidate from search */
+export interface AccountCandidate {
+  /** Salesforce Account ID (001...) */
+  id: string;
+  /** Account name (FirstName + LastName) */
+  name: string;
+  /** Phone number if available */
+  phone?: string;
+  /** Email if available */
+  email?: string;
+  /** City if available */
+  city?: string;
+  /** Match score (for sorting) */
+  score?: number;
+}
+
 export interface AccountSearchResult {
   /** Whether an account was found */
   found: boolean;
-  /** Salesforce Account ID (001...) */
+  /** Salesforce Account ID (001...) - first/best match */
   accountId?: string;
-  /** Account name (FirstName + LastName) */
+  /** Account name (FirstName + LastName) - first/best match */
   accountName?: string;
   /** Search method that found the account */
   matchedBy?: 'phone' | 'email' | 'name';
+  /** Multiple candidates when more than one match found (max 5) */
+  candidates?: AccountCandidate[];
+  /** True if multiple accounts found and user should select */
+  multipleResults?: boolean;
   /** Error code if search failed */
   error?: 'SESSION_REQUIRED' | 'CREDENTIALS_CAPTURE_FAILED' | 'BROWSER_PROFILE_LOCKED' | 'SEARCH_ERROR' | 'UNKNOWN';
   /** Human-readable error message */

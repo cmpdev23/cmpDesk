@@ -119,9 +119,27 @@ function Dossiers() {
     if (!accountData.lastName) {
       errors.lastName = 'Le nom est requis';
     }
+    if (!accountData.phone) {
+      errors.phone = 'Le téléphone est requis';
+    }
+    if (!accountData.email) {
+      errors.email = 'L\'email est requis';
+    }
 
     setAccountErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  /**
+   * Check if Account step required fields are filled (for button state)
+   */
+  const isAccountStepComplete = (): boolean => {
+    return Boolean(
+      accountData.firstName?.trim() &&
+      accountData.lastName?.trim() &&
+      accountData.phone?.trim() &&
+      accountData.email?.trim()
+    );
   };
 
   /**
@@ -186,7 +204,12 @@ function Dossiers() {
       setSearchResult(result);
 
       if (result.found) {
-        setSearchStatus('found');
+        // Check if multiple results returned
+        if (result.multipleResults && result.candidates && result.candidates.length > 1) {
+          setSearchStatus('multiple');
+        } else {
+          setSearchStatus('found');
+        }
       } else if (result.error) {
         setSearchStatus('error');
         setSearchError(result.message || 'Erreur lors de la recherche');
@@ -228,16 +251,23 @@ function Dossiers() {
 
   /**
    * Called when user chooses to use the found account
+   * @param accountId - Optional account ID (used when selecting from multiple results)
+   * @param accountName - Optional account name (used when selecting from multiple results)
    */
-  const handleUseAccount = () => {
-    if (searchResult?.found && searchResult.accountId && searchResult.accountName) {
+  const handleUseAccount = (accountId?: string, accountName?: string) => {
+    // If accountId is provided (from multiple selection), use it
+    // Otherwise fallback to the single searchResult
+    const finalAccountId = accountId || searchResult?.accountId;
+    const finalAccountName = accountName || searchResult?.accountName;
+    
+    if (finalAccountId && finalAccountName) {
       setAccountSearchState({
         found: true,
-        accountId: searchResult.accountId,
-        accountName: searchResult.accountName,
-        matchedBy: searchResult.matchedBy,
+        accountId: finalAccountId,
+        accountName: finalAccountName,
+        matchedBy: searchResult?.matchedBy,
       });
-      console.log('Using existing account:', searchResult.accountId);
+      console.log('Using existing account:', finalAccountId);
     }
     setCurrentStep('opportunity');
   };
@@ -471,7 +501,12 @@ function Dossiers() {
                     )}
                   </Button>
                 ) : (
-                  <Button onClick={handleNext}>Suivant →</Button>
+                  <Button
+                    onClick={handleNext}
+                    disabled={currentStep === 'account' && !isAccountStepComplete()}
+                  >
+                    Suivant →
+                  </Button>
                 )}
               </div>
             )}

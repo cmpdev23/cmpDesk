@@ -594,8 +594,12 @@ async function searchAccount({ phone, email, firstName, lastName }) {
         log.info('AURA', 'Using getAnswers (SOSL) for phone search - the working solution!');
         const soslResult = await searchByGetAnswers(page, credentials, cleanPhone);
         if (soslResult.found) {
-          soslResult.matchedBy = 'phone_sosl';
-          log.info('AURA', `Phone found via SOSL: ${soslResult.accountName} (${soslResult.accountId})`);
+          soslResult.matchedBy = 'phone';
+          if (soslResult.multipleResults) {
+            log.info('AURA', `Phone found via SOSL: ${soslResult.candidates.length} accounts (user must select)`);
+          } else {
+            log.info('AURA', `Phone found via SOSL: ${soslResult.accountName} (${soslResult.accountId})`);
+          }
           await saveCookies(context);
           await context.close();
           return soslResult;
@@ -1891,9 +1895,11 @@ async function searchByGetAnswers(page, credentials, phone) {
     return { found: false, error: result.error };
   }
   
-  // Parse KEYWORD_SEARCH results
+  // Parse KEYWORD_SEARCH results - collect ALL accounts
   const answers = result.returnValue?.answers || [];
   log.debug('SOSL', `getAnswers returned ${answers.length} answer categories`);
+  
+  const accountCandidates = [];
   
   for (const answer of answers) {
     if (answer.type === 'KEYWORD_SEARCH' && answer.data?.results) {
@@ -1908,24 +1914,59 @@ async function searchByGetAnswers(page, credentials, phone) {
           if (id.startsWith('001')) {
             const accountName = record.Name || '';
             const accountPhone = record.Phone || '';
+            const accountEmail = record.Primary_Email__c || record.PersonEmail || '';
+            const accountCity = record.BillingCity || record.PersonMailingCity || '';
+            
             log.info('SOSL', `Found account via getAnswers: ${accountName} (${id}), Phone: ${accountPhone}`);
             
-            return {
-              found: true,
-              accountId: id,
-              accountName: accountName,
+            accountCandidates.push({
+              id: id,
+              name: accountName,
               phone: accountPhone,
-              email: record.Primary_Email__c || record.PersonEmail || '',
-              matchedBy: 'phone_sosl'
-            };
+              email: accountEmail,
+              city: accountCity,
+            });
+            
+            // Limit to 5 candidates max
+            if (accountCandidates.length >= 5) break;
           }
         }
+        if (accountCandidates.length >= 5) break;
       }
     }
+    if (accountCandidates.length >= 5) break;
   }
   
-  log.debug('SOSL', 'No accounts found via getAnswers');
-  return { found: false };
+  // No accounts found
+  if (accountCandidates.length === 0) {
+    log.debug('SOSL', 'No accounts found via getAnswers');
+    return { found: false };
+  }
+  
+  // Single account found
+  if (accountCandidates.length === 1) {
+    const account = accountCandidates[0];
+    return {
+      found: true,
+      accountId: account.id,
+      accountName: account.name,
+      phone: account.phone,
+      email: account.email,
+      matchedBy: 'phone_sosl'
+    };
+  }
+  
+  // Multiple accounts found - return candidates for user selection
+  log.info('SOSL', `Multiple accounts found via getAnswers: ${accountCandidates.length}`);
+  return {
+    found: true,
+    multipleResults: true,
+    candidates: accountCandidates,
+    // Set first one as default (user can change)
+    accountId: accountCandidates[0].id,
+    accountName: accountCandidates[0].name,
+    matchedBy: 'phone_sosl'
+  };
 }
 
 // ============================================================================

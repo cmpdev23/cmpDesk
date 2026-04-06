@@ -5,12 +5,14 @@
  * This component is shown after the user fills in account info and clicks "Next".
  * It displays the search results and allows the user to:
  * - Use an existing account (if found)
+ * - Select from multiple accounts (if multiple found)
  * - Create a new account (regardless of search result)
  * - Go back to modify the account info
  *
  * Design System: shadcn/ui (radix-lyra preset)
  */
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,11 +21,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { AccountSearchResult } from "@/types/electron";
+import type { AccountSearchResult, AccountCandidate } from "@/types/electron";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SearchStepStatus = 'searching' | 'found' | 'not-found' | 'error';
+export type SearchStepStatus = 'searching' | 'found' | 'multiple' | 'not-found' | 'error';
 
 interface AccountSearchStepProps {
   /** Current search status */
@@ -32,8 +34,8 @@ interface AccountSearchStepProps {
   searchResult: AccountSearchResult | null;
   /** Error message if status is 'error' */
   errorMessage?: string;
-  /** Called when user wants to use the found account */
-  onUseAccount: () => void;
+  /** Called when user wants to use the found account (or selected from multiple) */
+  onUseAccount: (accountId?: string, accountName?: string) => void;
   /** Called when user wants to create a new account */
   onCreateNew: () => void;
   /** Called when user wants to go back to edit account info */
@@ -52,6 +54,9 @@ export function AccountSearchStep({
   onCreateNew,
   onPrevious,
 }: AccountSearchStepProps) {
+  // State for tracking selected candidate when multiple results
+  const [selectedCandidate, setSelectedCandidate] = useState<AccountCandidate | null>(null);
+
   // ─── Searching State ────────────────────────────────────────────────────────
   if (status === 'searching') {
     return (
@@ -108,7 +113,103 @@ export function AccountSearchStep({
     );
   }
 
-  // ─── Account Found State ────────────────────────────────────────────────────
+  // ─── Multiple Results State ────────────────────────────────────────────────
+  if (status === 'multiple' && searchResult?.multipleResults && searchResult?.candidates) {
+    const candidates = searchResult.candidates;
+    
+    return (
+      <Card className="pl-1 border border-blue-200 dark:border-blue-900 ring-0">
+        <CardHeader>
+          <CardTitle className="text-blue-700 dark:text-blue-400">
+            🔍 Plusieurs comptes trouvés
+          </CardTitle>
+          <CardDescription>
+            {candidates.length} comptes correspondent à votre recherche
+            {searchResult.matchedBy && (
+              <span className="ml-1">
+                (via {searchResult.matchedBy === 'phone' ? 'téléphone' : searchResult.matchedBy === 'email' ? 'email' : 'nom'})
+              </span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Candidate List */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-muted-foreground">
+              Sélectionnez le compte à utiliser :
+            </p>
+            <div className="space-y-2">
+              {candidates.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  onClick={() => setSelectedCandidate(candidate)}
+                  className={`w-full p-3 text-left rounded-lg border transition-colors ${
+                    selectedCandidate?.id === candidate.id
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
+                      : 'border-border hover:border-blue-300 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className={`font-medium ${
+                        selectedCandidate?.id === candidate.id
+                          ? 'text-blue-800 dark:text-blue-200'
+                          : 'text-foreground'
+                      }`}>
+                        {candidate.name}
+                      </p>
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        {candidate.phone && (
+                          <span>📞 {candidate.phone}</span>
+                        )}
+                        {candidate.email && (
+                          <span>✉️ {candidate.email}</span>
+                        )}
+                        {candidate.city && (
+                          <span>📍 {candidate.city}</span>
+                        )}
+                      </div>
+                    </div>
+                    {selectedCandidate?.id === candidate.id && (
+                      <span className="text-blue-600 dark:text-blue-400">✓</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button
+              onClick={() => onUseAccount(selectedCandidate?.id, selectedCandidate?.name)}
+              className="flex-1"
+              disabled={!selectedCandidate}
+            >
+              {selectedCandidate ? 'Utiliser ce compte →' : 'Sélectionnez un compte'}
+            </Button>
+            <Button variant="outline" onClick={onCreateNew} className="flex-1">
+              Créer un nouveau compte
+            </Button>
+          </div>
+
+          {/* Go back link */}
+          <div className="pt-2 border-t border-border">
+            <button
+              type="button"
+              onClick={onPrevious}
+              className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+            >
+              ← Modifier les informations du compte
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ─── Account Found State (single result) ───────────────────────────────────
   if (status === 'found' && searchResult?.found) {
     return (
       <Card className="pl-1 border border-green-200 dark:border-green-900 ring-0">
@@ -157,7 +258,7 @@ export function AccountSearchStep({
 
           {/* Action Buttons */}
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button onClick={onUseAccount} className="flex-1">
+            <Button onClick={() => onUseAccount()} className="flex-1">
               Utiliser ce compte →
             </Button>
             <Button variant="outline" onClick={onCreateNew} className="flex-1">

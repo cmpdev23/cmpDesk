@@ -93,6 +93,7 @@ export function OpportunityFormStepCompte({
           <FormField
             label="Téléphone"
             htmlFor="phone"
+            required
             error={errors.phone}
           >
             <InputField
@@ -102,6 +103,7 @@ export function OpportunityFormStepCompte({
               value={data.phone}
               onChange={handleInputChange}
               placeholder="Ex: 514-555-1234"
+              required
             />
           </FormField>
 
@@ -109,6 +111,7 @@ export function OpportunityFormStepCompte({
           <FormField
             label="Email"
             htmlFor="email"
+            required
             error={errors.email}
           >
             <InputField
@@ -118,6 +121,7 @@ export function OpportunityFormStepCompte({
               value={data.email}
               onChange={handleInputChange}
               placeholder="Ex: client@exemple.com"
+              required
             />
           </FormField>
         </div>
