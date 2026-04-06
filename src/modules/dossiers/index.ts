@@ -11,6 +11,8 @@
 
 // Components
 export { OpportunityFormStepCompte } from './components/OpportunityFormStepCompte';
+export { AccountSearchStep } from './components/AccountSearchStep';
+export type { SearchStepStatus } from './components/AccountSearchStep';
 export { OpportunityFormStep1 } from './components/OpportunityFormStep1';
 export { OpportunityFormStep2 } from './components/OpportunityFormStep2';
 export { DossierPageHeader } from './components/DossierPageHeader';

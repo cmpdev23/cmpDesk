@@ -3,7 +3,10 @@
  * @description Page de création de dossier (Opportunity)
  *
  * Multi-step form for creating Opportunities in Salesforce.
+ * 
+ * Workflow:
  * - Step 1: Infos Compte (Account contact information)
+ * - Step 1.5: Account Search Result (intermediate - shows search result)
  * - Step 2: Informations générales (Opportunity)
  * - Step 3: Famille de produit (Case)
  *
@@ -18,6 +21,7 @@
 import { useState } from 'react';
 import {
   OpportunityFormStepCompte,
+  AccountSearchStep,
   OpportunityFormStep1,
   OpportunityFormStep2,
   DEFAULT_ACCOUNT_DATA,
@@ -25,26 +29,61 @@ import {
   DEFAULT_STEP2_DATA,
   DossierPageHeader,
 } from '@/modules/dossiers';
-import type { AccountStepData, AccountSearchState, OpportunityStep1Data, CaseStep2Data } from '@/modules/dossiers';
+import type { 
+  AccountStepData, 
+  AccountSearchState, 
+  OpportunityStep1Data, 
+  CaseStep2Data,
+  SearchStepStatus,
+} from '@/modules/dossiers';
+import type { AccountSearchResult } from '@/types/electron';
 import { Button } from '@/components/ui/button';
 
 // DEV mode flag — skip validation when true
 const IS_DEV = import.meta.env.DEV;
 
 /**
+ * Form step types for the workflow
+ * - 'account': Step 1 - Account contact form
+ * - 'search-result': Step 1.5 - Intermediate search result step
+ * - 'opportunity': Step 2 - Opportunity details
+ * - 'case': Step 3 - Case/Product family details
+ */
+type FormStep = 'account' | 'search-result' | 'opportunity' | 'case';
+
+/**
+ * Get display step number for header (1, 2, or 3)
+ */
+function getDisplayStep(step: FormStep): number {
+  switch (step) {
+    case 'account':
+    case 'search-result':
+      return 1;
+    case 'opportunity':
+      return 2;
+    case 'case':
+      return 3;
+  }
+}
+
+/**
  * Dossiers page - Multi-step form for opportunity creation
  */
 function Dossiers() {
   // Current step navigation
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 3; // Total steps as per docs
+  const [currentStep, setCurrentStep] = useState<FormStep>('account');
 
   // Form data state
   const [accountData, setAccountData] = useState<AccountStepData>(DEFAULT_ACCOUNT_DATA);
   const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
   const [step2Data, setStep2Data] = useState<CaseStep2Data>(DEFAULT_STEP2_DATA);
 
-  // Account search state - stores result of Salesforce account search
+  // Account search state
+  const [searchStatus, setSearchStatus] = useState<SearchStepStatus>('searching');
+  const [searchResult, setSearchResult] = useState<AccountSearchResult | null>(null);
+  const [searchError, setSearchError] = useState<string | undefined>();
+
+  // Account selection state - stores which account to use
   const [accountSearchState, setAccountSearchState] = useState<AccountSearchState | null>(null);
 
   // Form errors (will be used for validation)
@@ -114,29 +153,94 @@ function Dossiers() {
     return Object.keys(errors).length === 0;
   };
 
-  // ─── Navigation Handlers ──────────────────────────────────────────────────────
+  // ─── Search Function ───────────────────────────────────────────────────────────
 
-  const handleNext = () => {
-    let isValid = true;
+  /**
+   * Perform account search when transitioning from account step to search-result
+   */
+  const performAccountSearch = async () => {
+    setSearchStatus('searching');
+    setSearchError(undefined);
+    setSearchResult(null);
+    setCurrentStep('search-result');
 
-    // Validate current step (unless DEV mode)
-    if (currentStep === 1) {
-      isValid = validateAccount();
-    } else if (currentStep === 2) {
-      isValid = validateStep1();
-    } else if (currentStep === 3) {
-      isValid = validateStep2();
-    }
+    try {
+      const result = await window.electronAPI.salesforce.searchAccount({
+        phone: accountData.phone || undefined,
+        email: accountData.email || undefined,
+        firstName: accountData.firstName || undefined,
+        lastName: accountData.lastName || undefined,
+      });
 
-    if (isValid && currentStep < totalSteps) {
-      setCurrentStep((prev) => prev + 1);
+      setSearchResult(result);
+
+      if (result.found) {
+        setSearchStatus('found');
+      } else if (result.error) {
+        setSearchStatus('error');
+        setSearchError(result.message || 'Erreur lors de la recherche');
+      } else {
+        setSearchStatus('not-found');
+      }
+    } catch (err) {
+      setSearchStatus('error');
+      setSearchError(err instanceof Error ? err.message : 'Erreur inconnue');
     }
   };
 
-  const handlePrevious = () => {
-    if (currentStep > 1) {
-      setCurrentStep((prev) => prev - 1);
+  // ─── Navigation Handlers ──────────────────────────────────────────────────────
+
+  const handleNext = () => {
+    if (currentStep === 'account') {
+      if (validateAccount()) {
+        // Trigger search and show intermediate step
+        performAccountSearch();
+      }
+    } else if (currentStep === 'opportunity') {
+      if (validateStep1()) {
+        setCurrentStep('case');
+      }
     }
+    // Note: 'search-result' step uses its own buttons, not the main Next button
+  };
+
+  const handlePrevious = () => {
+    if (currentStep === 'search-result') {
+      setCurrentStep('account');
+    } else if (currentStep === 'opportunity') {
+      // Go back to account step (skip search-result)
+      setCurrentStep('account');
+    } else if (currentStep === 'case') {
+      setCurrentStep('opportunity');
+    }
+  };
+
+  /**
+   * Called when user chooses to use the found account
+   */
+  const handleUseAccount = () => {
+    if (searchResult?.found && searchResult.accountId && searchResult.accountName) {
+      setAccountSearchState({
+        found: true,
+        accountId: searchResult.accountId,
+        accountName: searchResult.accountName,
+        matchedBy: searchResult.matchedBy,
+      });
+      console.log('Using existing account:', searchResult.accountId);
+    }
+    setCurrentStep('opportunity');
+  };
+
+  /**
+   * Called when user chooses to create a new account
+   */
+  const handleCreateNew = () => {
+    setAccountSearchState({
+      found: false,
+      // Will create new account on submit
+    });
+    console.log('Will create new account');
+    setCurrentStep('opportunity');
   };
 
   const handleSubmit = () => {
@@ -146,20 +250,20 @@ function Dossiers() {
     const step2Valid = validateStep2();
 
     if (!accountValid) {
-      setCurrentStep(1);
+      setCurrentStep('account');
       return;
     }
     if (!step1Valid) {
-      setCurrentStep(2);
+      setCurrentStep('opportunity');
       return;
     }
     if (!step2Valid) {
-      setCurrentStep(3);
+      setCurrentStep('case');
       return;
     }
 
     // TODO: Submit to Salesforce API
-    console.log('Submitting form data:', { accountData, step1Data, step2Data });
+    console.log('Submitting form data:', { accountData, accountSearchState, step1Data, step2Data });
   };
 
   // ─── Form Data Handlers ───────────────────────────────────────────────────────
@@ -174,19 +278,6 @@ function Dossiers() {
     if (accountSearchState) {
       setAccountSearchState(null);
     }
-  };
-
-  /**
-   * Called when an account is found via Salesforce search.
-   * Stores the account ID for use during Opportunity creation.
-   */
-  const handleAccountFound = (accountId: string, accountName: string) => {
-    setAccountSearchState({
-      found: true,
-      accountId,
-      accountName,
-    });
-    console.log('Account found:', { accountId, accountName });
   };
 
   const handleStep1Change = (data: OpportunityStep1Data) => {
@@ -205,10 +296,15 @@ function Dossiers() {
     }
   };
 
+  // ─── Render ───────────────────────────────────────────────────────────────────
+
+  const displayStep = getDisplayStep(currentStep);
+  const isSearchResultStep = currentStep === 'search-result';
+
   return (
     <div className="flex flex-col h-full">
       {/* Page header */}
-      <DossierPageHeader currentStep={currentStep} />
+      <DossierPageHeader currentStep={displayStep} />
 
       {/* DEV mode indicator */}
       {IS_DEV && (
@@ -222,16 +318,30 @@ function Dossiers() {
         <div className="p-6">
           <div className="max-w-4xl">
             {/* Step forms — each step component owns its Card container */}
-            {currentStep === 1 && (
+            
+            {/* Step 1: Account Info Form */}
+            {currentStep === 'account' && (
               <OpportunityFormStepCompte
                 data={accountData}
                 onChange={handleAccountChange}
                 errors={accountErrors}
-                onAccountFound={handleAccountFound}
               />
             )}
 
-            {currentStep === 2 && (
+            {/* Step 1.5: Search Result (intermediate) */}
+            {currentStep === 'search-result' && (
+              <AccountSearchStep
+                status={searchStatus}
+                searchResult={searchResult}
+                errorMessage={searchError}
+                onUseAccount={handleUseAccount}
+                onCreateNew={handleCreateNew}
+                onPrevious={() => setCurrentStep('account')}
+              />
+            )}
+
+            {/* Step 2: Opportunity Details */}
+            {currentStep === 'opportunity' && (
               <OpportunityFormStep1
                 data={step1Data}
                 onChange={handleStep1Change}
@@ -239,7 +349,8 @@ function Dossiers() {
               />
             )}
 
-            {currentStep === 3 && (
+            {/* Step 3: Case/Product Family */}
+            {currentStep === 'case' && (
               <OpportunityFormStep2
                 data={step2Data}
                 onChange={handleStep2Change}
@@ -247,22 +358,24 @@ function Dossiers() {
               />
             )}
 
-            {/* Navigation buttons */}
-            <div className="flex justify-between mt-6">
-              <Button
-                variant="secondary"
-                disabled={currentStep === 1}
-                onClick={handlePrevious}
-              >
-                ← Précédent
-              </Button>
+            {/* Navigation buttons - hidden during search-result step (it has its own) */}
+            {!isSearchResultStep && (
+              <div className="flex justify-between mt-6">
+                <Button
+                  variant="secondary"
+                  disabled={currentStep === 'account'}
+                  onClick={handlePrevious}
+                >
+                  ← Précédent
+                </Button>
 
-              {currentStep === totalSteps ? (
-                <Button onClick={handleSubmit}>Créer le dossier</Button>
-              ) : (
-                <Button onClick={handleNext}>Suivant →</Button>
-              )}
-            </div>
+                {currentStep === 'case' ? (
+                  <Button onClick={handleSubmit}>Créer le dossier</Button>
+                ) : (
+                  <Button onClick={handleNext}>Suivant →</Button>
+                )}
+              </div>
+            )}
 
             {/* Debug: Current form data (DEV only) */}
             {IS_DEV && (
@@ -271,7 +384,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ accountData, accountSearchState, step1Data, step2Data }, null, 2)}
+                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data }, null, 2)}
                 </pre>
               </details>
             )}
