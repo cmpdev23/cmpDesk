@@ -1,28 +1,27 @@
 /**
  * Page d'accueil de cmpDesk
- * 
+ *
  * Design System: shadcn/ui (radix-lyra preset)
  */
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 
 function Home() {
   return (
     <div className="max-w-2xl p-6">
       {/* Titre principal */}
-      <h1 className="text-3xl font-bold text-foreground mb-2">
-        cmpDesk
-      </h1>
-      
+      <h1 className="mb-2 text-3xl font-bold text-foreground">cmpDesk</h1>
+
       {/* Description */}
-      <p className="text-muted-foreground mb-8">
-        Application desktop pour automatiser le montage de dossiers en assurance.
+      <p className="mb-8 text-muted-foreground">
+        Application desktop pour automatiser le montage de dossiers en
+        assurance.
       </p>
 
       {/* Status card */}
-      <div className="bg-card rounded-lg p-6 border border-border">
+      <div className="p-6 border rounded-lg bg-card border-border">
         <div className="flex items-center gap-2 mb-4">
-          <span className="w-2 h-2 bg-chart-2 rounded-full"></span>
+          <span className="w-2 h-2 rounded-full bg-chart-2"></span>
           <h2 className="text-lg font-semibold text-card-foreground">
             Structure initialisée
           </h2>
@@ -56,23 +55,19 @@ function Home() {
       </div>
 
       {/* Quick actions */}
-      <div className="mt-6 flex gap-3">
-        <Button>
-          Nouveau dossier
-        </Button>
-        <Button variant="outline">
-          Paramètres
-        </Button>
+      <div className="flex gap-3 mt-6">
+        <Button variant="default">Nouveau dossier</Button>
+        <Button variant="secondary">Paramètres</Button>
       </div>
 
       {/* Version info */}
-      <div className="mt-8 pt-6 border-t border-border">
-        <p className="text-muted-foreground text-xs">
+      <div className="pt-6 mt-8 border-t border-border">
+        <p className="text-xs text-muted-foreground">
           Version 0.1.0 • Base UI Foundation
         </p>
       </div>
     </div>
-  )
+  );
 }
 
-export default Home
+export default Home;
