@@ -1478,3 +1478,112 @@ const AUTH_WAIT_CONFIG = {
 | User didn't login in time | `AUTH_TIMEOUT` | "Délai d'authentification dépassé. Veuillez réessayer." |
 | Aura still broken after auth | `AURA_NOT_AVAILABLE` | "Erreur Salesforce: framework Aura non disponible." |
 
+---
+
+## Milestone — Electron Refactoring (2026-04-06)
+
+### Overview
+
+Refactored `electron/main.js` from 1779 lines into a modular architecture with 14 files.
+
+### Problem
+
+- Single monolithic file with 1779 lines
+- 7 different responsibilities mixed together
+- Difficult to maintain, test, and extend
+- Projected growth to 3000+ lines with upcoming features
+
+### New Architecture
+
+```
+electron/
+├── main.js                    # Entry point (~100 lines)
+├── config/
+│   └── env.js                 # Environment configuration
+├── lib/
+│   ├── logger.js              # Logging with UI buffer
+│   └── window.js              # Window & menu management
+├── services/
+│   ├── auth/
+│   │   ├── index.js           # Auth service facade
+│   │   └── browser.js         # Playwright browser management
+│   └── salesforce/
+│       ├── index.js           # Salesforce service facade
+│       ├── aura-client.js     # Aura API low-level calls
+│       └── search.js          # Account search strategies
+└── ipc/
+    ├── index.js               # IPC registration hub
+    ├── auth.js                # Auth IPC handlers
+    ├── salesforce.js          # Salesforce IPC handlers
+    ├── logs.js                # Log IPC handlers
+    ├── theme.js               # Theme IPC handlers
+    └── app.js                 # App info IPC handlers
+```
+
+### Module Responsibilities
+
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `config/env.js` | ~90 | Centralized environment variables |
+| `lib/logger.js` | ~170 | Logging with level filtering and UI buffer |
+| `lib/window.js` | ~150 | Window creation, menu, theme |
+| `services/auth/browser.js` | ~160 | Playwright context management |
+| `services/auth/index.js` | ~180 | Auth orchestration |
+| `services/salesforce/aura-client.js` | ~170 | Aura API calls |
+| `services/salesforce/search.js` | ~280 | Search strategies |
+| `services/salesforce/index.js` | ~150 | Salesforce facade |
+| `ipc/*.js` | ~200 | IPC handlers (split by domain) |
+| `main.js` | ~100 | App lifecycle only |
+
+### Benefits
+
+1. **Separation of Concerns**: Each module has one responsibility
+2. **Testability**: Modules can be tested in isolation
+3. **Maintainability**: Changes localized to relevant module
+4. **Scalability**: New features get their own module files
+5. **Readability**: ~100-200 lines per file vs 1779 lines
+
+### Adding New Features
+
+To add Opportunity creation:
+1. Create `services/salesforce/opportunity.js`
+2. Add functions to `services/salesforce/index.js`
+3. Create `ipc/opportunity.js` (or extend `ipc/salesforce.js`)
+4. Register in `ipc/index.js`
+
+### Migration Status
+
+- [x] Created new modular structure
+- [x] `main.refactored.js` created as new entry point
+- [ ] Test new structure
+- [ ] Backup `main.js` → `main.legacy.js`
+- [ ] Rename `main.refactored.js` → `main.js`
+- [ ] Update `package.json` if needed
+
+### Files Created
+
+```
+electron/config/env.js
+electron/lib/logger.js
+electron/lib/window.js
+electron/services/auth/index.js
+electron/services/auth/browser.js
+electron/services/salesforce/index.js
+electron/services/salesforce/aura-client.js
+electron/services/salesforce/search.js
+electron/ipc/index.js
+electron/ipc/auth.js
+electron/ipc/salesforce.js
+electron/ipc/logs.js
+electron/ipc/theme.js
+electron/ipc/app.js
+electron/main.refactored.js
+```
+
+### Rules
+
+- **One import per service**: Always import from `index.js` facade
+- **Config in one place**: All env vars in `config/env.js`
+- **IPC by domain**: Split IPC handlers by functional area
+- **Lazy loading**: Services load dependencies only when needed
+
