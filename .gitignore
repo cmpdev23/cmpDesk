@@ -66,3 +66,5 @@ dist-electron/
 
 model/
 note.txt
+test/
+branch_doc/

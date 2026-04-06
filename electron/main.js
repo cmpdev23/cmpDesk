@@ -584,23 +584,54 @@ async function searchAccount({ phone, email, firstName, lastName }) {
     log.debug('AURA', 'Credentials captured successfully');
     
     // Search by phone first (most precise)
+    // SOLUTION: Use getAnswers (SOSL) which CAN search by Phone!
     if (phone) {
       const cleanPhone = phone.replace(/\D/g, ''); // Remove non-digits
-      if (cleanPhone.length >= 10) {
-        log.debug('AURA', 'Searching by phone...');
-        const result = await searchByTerm(page, credentials, cleanPhone);
-        if (result.found) {
-          result.matchedBy = 'phone';
+      log.info('AURA', `Phone search: original="${phone}", cleaned="${cleanPhone}", length=${cleanPhone.length}`);
+      
+      if (cleanPhone.length >= 7) {  // At least 7 digits for phone search
+        // PRIMARY METHOD: Use getAnswers (SOSL-based) - this actually works for phone!
+        log.info('AURA', 'Using getAnswers (SOSL) for phone search - the working solution!');
+        const soslResult = await searchByGetAnswers(page, credentials, cleanPhone);
+        if (soslResult.found) {
+          soslResult.matchedBy = 'phone_sosl';
+          log.info('AURA', `Phone found via SOSL: ${soslResult.accountName} (${soslResult.accountId})`);
           await saveCookies(context);
           await context.close();
-          return result;
+          return soslResult;
         }
+        
+        // FALLBACK: Try getSuggestions with different formats (works for name in phone)
+        log.debug('AURA', 'SOSL search returned no results, trying getSuggestions fallback...');
+        const phoneFormats = [
+          cleanPhone,                                           // 8193332623
+          phone,                                                // (819) 333-2623
+        ];
+        
+        for (const phoneFormat of phoneFormats) {
+          log.debug('AURA', `Searching by phone format: "${phoneFormat}"`);
+          const result = await searchByTerm(page, credentials, phoneFormat);
+          if (result.found) {
+            result.matchedBy = 'phone';
+            log.info('AURA', `Phone matched with format: "${phoneFormat}"`);
+            await saveCookies(context);
+            await context.close();
+            return result;
+          }
+        }
+        
+        log.info('AURA', 'Phone search: no results found via SOSL or getSuggestions.');
+      } else {
+        log.warn('AURA', `Phone too short (${cleanPhone.length} digits), skipping phone search`);
       }
     }
     
     // Search by email
     if (email) {
-      log.debug('AURA', 'Searching by email...');
+      log.info('AURA', `Email search: "${email}"`);
+      
+      // Try global search with full email
+      log.debug('AURA', 'Searching by email (global search)...');
       const result = await searchByTerm(page, credentials, email);
       if (result.found) {
         result.matchedBy = 'email';
@@ -608,6 +639,31 @@ async function searchAccount({ phone, email, firstName, lastName }) {
         await context.close();
         return result;
       }
+      
+      // Try with email username only (before @)
+      const emailUsername = email.split('@')[0];
+      if (emailUsername && emailUsername.length >= 3) {
+        log.debug('AURA', `Searching by email username: "${emailUsername}"`);
+        const result2 = await searchByTerm(page, credentials, emailUsername);
+        if (result2.found) {
+          result2.matchedBy = 'email_username';
+          await saveCookies(context);
+          await context.close();
+          return result2;
+        }
+      }
+      
+      // Try without entityName filter (broader search)
+      log.debug('AURA', 'Email search failed, trying without entity filter...');
+      const fallbackResult = await searchByTermNoFilter(page, credentials, email);
+      if (fallbackResult.found) {
+        fallbackResult.matchedBy = 'email_fallback';
+        await saveCookies(context);
+        await context.close();
+        return fallbackResult;
+      }
+      
+      log.info('AURA', 'Email search: no results. Note: Salesforce global search may not index Email/PersonEmail field by default.');
     }
     
     // Search by name
@@ -622,11 +678,21 @@ async function searchAccount({ phone, email, firstName, lastName }) {
           await context.close();
           return result;
         }
+        
+        // Fallback: search by name WITHOUT entityName filter (broader search)
+        log.debug('AURA', 'Trying fallback search without entity filter...');
+        const fallbackResult = await searchByTermNoFilter(page, credentials, fullName);
+        if (fallbackResult.found) {
+          fallbackResult.matchedBy = 'name';
+          await saveCookies(context);
+          await context.close();
+          return fallbackResult;
+        }
       }
     }
     
     // No match found
-    log.info('AURA', 'No account found');
+    log.info('AURA', 'No account found after all search attempts');
     await saveCookies(context);
     await context.close();
     return { found: false };
@@ -706,8 +772,11 @@ async function captureAuraCredentials(page, timeout = 15000) {
 
 /**
  * Search for an account by a search term using Aura API.
+ * Returns detailed debug info for logging.
  */
 async function searchByTerm(page, credentials, term) {
+  log.debug('AURA', `Searching for term: "${term}"`);
+  
   const result = await page.evaluate(async (argsJson) => {
     const { credentials, term, descriptor } = JSON.parse(argsJson);
     
@@ -748,12 +817,255 @@ async function searchByTerm(page, credentials, term) {
       });
       
       if (!response.ok) {
-        return { found: false, error: `HTTP ${response.status}` };
+        return { found: false, error: `HTTP ${response.status}`, _debug: { httpStatus: response.status } };
       }
       
       const rawText = await response.text();
       
       // Extract first JSON object
+      const firstBrace = rawText.indexOf('{');
+      if (firstBrace === -1) {
+        return { found: false, error: 'No JSON in response', _debug: { rawLength: rawText.length, rawPreview: rawText.substring(0, 200) } };
+      }
+      
+      let depth = 0, inString = false, escape = false, start = -1;
+      for (let i = firstBrace; i < rawText.length; i++) {
+        const ch = rawText[i];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\' && inString) { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === '{') { if (depth === 0) start = i; depth++; }
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0 && start !== -1) {
+            const jsonStr = rawText.substring(start, i + 1);
+            const data = JSON.parse(jsonStr);
+            
+            // Parse response
+            const actions = data.actions || [];
+            if (actions.length === 0) {
+              return { found: false, _debug: { reason: 'No actions in response', actionsLength: 0 } };
+            }
+            
+            const actionState = actions[0].state;
+            if (actionState !== 'SUCCESS') {
+              return {
+                found: false,
+                _debug: {
+                  reason: 'Action not SUCCESS',
+                  state: actionState,
+                  error: actions[0].error || null
+                }
+              };
+            }
+            
+            const returnValue = actions[0].returnValue || {};
+            
+            // Extract records from various response structures
+            let records = [];
+            let recordSource = 'none';
+            
+            if (returnValue.records && Array.isArray(returnValue.records)) {
+              records = returnValue.records;
+              recordSource = 'returnValue.records';
+            } else if (returnValue.suggestions?.records) {
+              records = returnValue.suggestions.records;
+              recordSource = 'returnValue.suggestions.records';
+            } else if (returnValue.answers && Array.isArray(returnValue.answers)) {
+              recordSource = 'returnValue.answers';
+              for (const answer of returnValue.answers) {
+                // Handle various answer.data structures
+                if (answer.data && Array.isArray(answer.data)) {
+                  records.push(...answer.data);
+                } else if (answer.data && typeof answer.data === 'object') {
+                  // data can be an object with sub-keys containing arrays
+                  for (const key of Object.keys(answer.data)) {
+                    const val = answer.data[key];
+                    if (Array.isArray(val)) {
+                      records.push(...val);
+                    }
+                  }
+                } else if (answer.records) {
+                  records.push(...answer.records);
+                } else if (answer.results) {
+                  records.push(...answer.results);
+                } else if (answer.items) {
+                  records.push(...answer.items);
+                }
+              }
+            } else if (returnValue.recentItems && Array.isArray(returnValue.recentItems)) {
+              records = returnValue.recentItems;
+              recordSource = 'returnValue.recentItems';
+            }
+            
+            // Debug: capture response structure
+            const debugInfo = {
+              recordSource,
+              totalRecords: records.length,
+              returnValueKeys: Object.keys(returnValue),
+              answersLength: returnValue.answers?.length || 0,
+            };
+            
+            // Log answers structure when no records found
+            if (records.length === 0 && returnValue.answers && Array.isArray(returnValue.answers)) {
+              debugInfo.answersStructure = returnValue.answers.map((answer, idx) => {
+                const info = {
+                  index: idx,
+                  type: answer.type || 'NO_TYPE',
+                  keys: Object.keys(answer),
+                  dataType: Array.isArray(answer.data) ? 'array' : (answer.data ? typeof answer.data : 'none'),
+                  dataLength: Array.isArray(answer.data) ? answer.data.length : 'N/A',
+                };
+                // If data is an object, log its keys
+                if (answer.data && typeof answer.data === 'object' && !Array.isArray(answer.data)) {
+                  info.dataKeys = Object.keys(answer.data);
+                  // Check if any sub-key has array data
+                  for (const key of info.dataKeys) {
+                    const val = answer.data[key];
+                    info[`data.${key}`] = Array.isArray(val) ? `array(${val.length})` : typeof val;
+                  }
+                }
+                return info;
+              });
+            }
+            
+            // If we have records, log first one's structure
+            if (records.length > 0) {
+              const firstRaw = records[0];
+              const firstRecord = firstRaw.record || firstRaw;
+              debugInfo.firstRecordKeys = Object.keys(firstRecord);
+              debugInfo.firstRecordId = firstRecord.Id || firstRecord.id || firstRecord.recordId || 'NO_ID';
+              debugInfo.firstRecordName = firstRecord.Name || firstRecord.name || 'NO_NAME';
+              debugInfo.firstRecordType = firstRecord.sobjectType || firstRecord.objectType || 'UNKNOWN';
+            }
+            
+            // Find Account records (ID starts with 001)
+            const accountRecords = [];
+            for (const rawRecord of records) {
+              const record = rawRecord.record || rawRecord;
+              const id = record.Id || record.id || record.recordId || '';
+              if (id.startsWith('001')) {
+                accountRecords.push({
+                  id,
+                  name: record.Name || record.name || `${record.FirstName || ''} ${record.LastName || ''}`.trim(),
+                  type: record.sobjectType || record.objectType || 'Account',
+                });
+              }
+            }
+            
+            debugInfo.accountRecordsFound = accountRecords.length;
+            if (accountRecords.length > 0) {
+              debugInfo.accounts = accountRecords.slice(0, 5); // First 5 accounts for logging
+            }
+            
+            // Return first account if found
+            if (accountRecords.length > 0) {
+              return {
+                found: true,
+                accountId: accountRecords[0].id,
+                accountName: accountRecords[0].name,
+                _debug: debugInfo,
+              };
+            }
+            
+            return { found: false, _debug: debugInfo };
+          }
+        }
+      }
+      
+      return { found: false, error: 'Could not parse response', _debug: { reason: 'JSON parse loop failed' } };
+    } catch (e) {
+      return { found: false, error: e.message, _debug: { exception: e.message } };
+    }
+  }, JSON.stringify({ credentials, term, descriptor: SEARCH_DESCRIPTOR }));
+  
+  // Log debug information from page.evaluate
+  if (result._debug) {
+    const debug = result._debug;
+    
+    if (result.error) {
+      log.warn('AURA', `Search error for "${term}": ${result.error}`, debug);
+    } else if (result.found) {
+      log.info('AURA', `Account found for "${term}": ${result.accountName} (${result.accountId})`, {
+        recordSource: debug.recordSource,
+        totalRecords: debug.totalRecords,
+        accountRecordsFound: debug.accountRecordsFound,
+      });
+    } else {
+      // Not found - log why
+      log.debug('AURA', `No account found for "${term}"`, {
+        recordSource: debug.recordSource,
+        totalRecords: debug.totalRecords,
+        accountRecordsFound: debug.accountRecordsFound,
+        returnValueKeys: debug.returnValueKeys,
+        answersLength: debug.answersLength,
+        answersStructure: debug.answersStructure,
+        firstRecordKeys: debug.firstRecordKeys,
+        firstRecordId: debug.firstRecordId,
+        firstRecordName: debug.firstRecordName,
+        firstRecordType: debug.firstRecordType,
+      });
+    }
+    
+    // Clean up debug info before returning
+    delete result._debug;
+  }
+  
+  return result;
+}
+
+/**
+ * Search for an account by term WITHOUT entityName filter (broader search).
+ * This is a fallback when the filtered search returns no results.
+ */
+async function searchByTermNoFilter(page, credentials, term) {
+  log.debug('AURA', `Fallback search (no entity filter) for: "${term}"`);
+  
+  const result = await page.evaluate(async (argsJson) => {
+    const { credentials, term, descriptor } = JSON.parse(argsJson);
+    
+    const message = {
+      actions: [{
+        id: '1;a',
+        descriptor: descriptor,
+        callingDescriptor: 'UNKNOWN',
+        params: {
+          term: term,
+          entityName: null,  // No filter - search all entities
+          maxRecords: 20,    // More records since we're not filtering
+          maxQueries: 0,
+          maxTips: 0,
+          maxListViews: 0,
+          context: { FILTERS: {} },
+          configurationName: 'GLOBAL_SEARCH_BAR',
+        },
+      }],
+    };
+    
+    const body = new URLSearchParams();
+    body.append('message', JSON.stringify(message));
+    body.append('aura.context', JSON.stringify(credentials.context));
+    body.append('aura.token', credentials.token || 'undefined');
+    
+    const qp = new URLSearchParams({
+      'ui-search-components-forcesearch-assistant.AssistantSuggestionsDataProvider.getSuggestions': '1',
+      'r': '1',
+    });
+    
+    try {
+      const response = await fetch('/aura?' + qp.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: body.toString(),
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        return { found: false, error: `HTTP ${response.status}` };
+      }
+      
+      const rawText = await response.text();
       const firstBrace = rawText.indexOf('{');
       if (firstBrace === -1) {
         return { found: false, error: 'No JSON in response' };
@@ -773,15 +1085,14 @@ async function searchByTerm(page, credentials, term) {
             const jsonStr = rawText.substring(start, i + 1);
             const data = JSON.parse(jsonStr);
             
-            // Parse response
             const actions = data.actions || [];
             if (actions.length === 0 || actions[0].state !== 'SUCCESS') {
-              return { found: false };
+              return { found: false, _debug: { reason: 'No success action' } };
             }
             
             const returnValue = actions[0].returnValue || {};
             
-            // Extract records from various response structures
+            // Extract all records from various structures
             let records = [];
             if (returnValue.records && Array.isArray(returnValue.records)) {
               records = returnValue.records;
@@ -791,37 +1102,400 @@ async function searchByTerm(page, credentials, term) {
               for (const answer of returnValue.answers) {
                 if (answer.data && Array.isArray(answer.data)) {
                   records.push(...answer.data);
+                } else if (answer.data && typeof answer.data === 'object') {
+                  // data can be an object with sub-keys containing arrays
+                  for (const key of Object.keys(answer.data)) {
+                    const val = answer.data[key];
+                    if (Array.isArray(val)) {
+                      records.push(...val);
+                    }
+                  }
                 } else if (answer.records) {
                   records.push(...answer.records);
+                } else if (answer.results) {
+                  records.push(...answer.results);
+                } else if (answer.items) {
+                  records.push(...answer.items);
                 }
               }
+            } else if (returnValue.recentItems && Array.isArray(returnValue.recentItems)) {
+              records = returnValue.recentItems;
             }
             
-            // Find Account records (ID starts with 001)
+            // Debug info
+            const debugInfo = {
+              totalRecords: records.length,
+              allRecordTypes: [],
+            };
+            
+            // Filter for Account records only (ID starts with 001)
+            const accountRecords = [];
             for (const rawRecord of records) {
               const record = rawRecord.record || rawRecord;
               const id = record.Id || record.id || record.recordId || '';
+              const objType = record.sobjectType || record.objectType || 'UNKNOWN';
+              
+              if (!debugInfo.allRecordTypes.includes(objType)) {
+                debugInfo.allRecordTypes.push(objType);
+              }
+              
               if (id.startsWith('001')) {
-                return {
-                  found: true,
-                  accountId: id,
-                  accountName: record.Name || record.name || `${record.FirstName || ''} ${record.LastName || ''}`.trim(),
-                };
+                accountRecords.push({
+                  id,
+                  name: record.Name || record.name || `${record.FirstName || ''} ${record.LastName || ''}`.trim(),
+                });
               }
             }
             
-            return { found: false };
+            debugInfo.accountRecordsFound = accountRecords.length;
+            
+            if (accountRecords.length > 0) {
+              return {
+                found: true,
+                accountId: accountRecords[0].id,
+                accountName: accountRecords[0].name,
+                _debug: debugInfo,
+              };
+            }
+            
+            return { found: false, _debug: debugInfo };
           }
         }
       }
       
-      return { found: false, error: 'Could not parse response' };
+      return { found: false, error: 'Parse failed' };
     } catch (e) {
       return { found: false, error: e.message };
     }
   }, JSON.stringify({ credentials, term, descriptor: SEARCH_DESCRIPTOR }));
   
+  // Log debug info
+  if (result._debug) {
+    const debug = result._debug;
+    if (result.found) {
+      log.info('AURA', `Fallback found account: ${result.accountName} (${result.accountId})`, {
+        totalRecords: debug.totalRecords,
+        allRecordTypes: debug.allRecordTypes,
+      });
+    } else {
+      log.debug('AURA', 'Fallback search: no account found', {
+        totalRecords: debug.totalRecords,
+        accountRecordsFound: debug.accountRecordsFound,
+        allRecordTypes: debug.allRecordTypes,
+      });
+    }
+    delete result._debug;
+  }
+  
   return result;
+}
+
+// ============================================================================
+// SOSL SEARCH VIA getAnswers (Phone Search Solution!)
+// ============================================================================
+
+/**
+ * SMART_SCOPE configuration captured from Salesforce UI.
+ * Defines which objects and fields are searchable via SOSL.
+ */
+const SMART_SCOPE_PHONE = [
+  {
+    cacheable: "Y",
+    name: "Account",
+    labelPlural: "Comptes",
+    fields: "Name\nRecordType.Name\ntoLabel(RecordType.Name) Name__l\nType\ntoLabel(Type) Type__l\nPersonBirthdate\nformat(PersonBirthdate) PersonBirthdate__f\nPhone\nPrimary_Email__c\nBillingPostalCode\nOwnerName__c\nAgent_Code__c\nCreatedDate\nformat(CreatedDate) CreatedDate__f\nRecordTypeId\nRecordType.Id\nRecordType.IsPersonType\nIsPersonAccount\nPersonContactId\nLastModifiedDate\nId\nLastModifiedById\nSystemModstamp"
+  },
+  {
+    cacheable: "Y",
+    name: "ContactPointPhone",
+    labelPlural: "Téléphones du point de contact",
+    fields: "TelephoneNumber\nActiveFromDate\nformat(ActiveFromDate) ActiveFromDate__f\nLastModifiedDate\nformat(LastModifiedDate) LastModifiedDate__f\nLastModifiedBy.Alias\nParent.Name\nParentId\nLastModifiedById\nCreatedDate\nId\nName\nSystemModstamp"
+  }
+];
+
+/**
+ * Search for an account by phone using getAnswers endpoint (SOSL-based).
+ * This is the solution discovered: pressing ENTER in Salesforce search uses
+ * PredictedResultsDataProviderController/getAnswers which uses SOSL and CAN search by Phone!
+ *
+ * @param {Page} page - Playwright page
+ * @param {Object} credentials - Aura credentials (token, fwuid)
+ * @param {string} phone - Phone number to search
+ * @returns {Promise<{ found: boolean, accountId?: string, accountName?: string }>}
+ */
+async function searchByGetAnswers(page, credentials, phone) {
+  log.info('SOSL', `Searching by phone using getAnswers (SOSL): "${phone}"`);
+  
+  const searchDialogSessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  
+  const result = await page.evaluate(async (argsJson) => {
+    const { credentials, phone, smartScope, sessionId } = JSON.parse(argsJson);
+    
+    const descriptor = 'serviceComponent://ui.search.components.forcesearch.predictedresults.PredictedResultsDataProviderController/ACTION$getAnswers';
+    
+    const message = {
+      actions: [{
+        id: '1;a',
+        descriptor: descriptor,
+        callingDescriptor: 'UNKNOWN',
+        params: {
+          term: phone,
+          pageSize: 50,
+          currentPage: 1,
+          context: {
+            FILTERS: {},
+            searchSource: "ASSISTANT_DIALOG",
+            disableIntentQuery: false,
+            disableSpellCorrection: false,
+            searchDialogSessionId: sessionId,
+            debugInfo: {
+              appName: "cmpDesk",
+              appType: "Console",
+              appNamespace: "c",
+              location: "home:landing"
+            }
+          },
+          sortBy: null,
+          topResultsRequestModel: {
+            scopeNames: [],
+            term: phone,
+            pageSize: 5,
+            enableRowActions: false,
+            withSingleSOSL: true,  // KEY: Uses SOSL search!
+            withEntityPrediction: true,
+            batchSize: 3,
+            batchingTimeout: 2500,
+            scopeMap: {
+              type: "TOP_RESULTS",
+              namespace: "",
+              label: "Principaux résultats",
+              labelPlural: "Principaux résultats",
+              resultsCmp: "forceSearch:predictedResults"
+            },
+            context: {
+              FILTERS: {},
+              searchSource: "ASSISTANT_DIALOG",
+              disableIntentQuery: false,
+              disableSpellCorrection: false,
+              searchDialogSessionId: sessionId,
+              debugInfo: {
+                appName: "cmpDesk",
+                appType: "Console",
+                appNamespace: "c",
+                location: "home:landing"
+              },
+              scopeSets: {
+                SMART_SCOPE: smartScope
+              }
+            },
+            withSpellCorrection: true,
+            configurationName: "GLOBAL_SEARCH_BAR"
+          },
+          remediationOptions: {}
+        }
+      }]
+    };
+    
+    const qp = new URLSearchParams({
+      'aura.context': JSON.stringify({ mode: 'PROD', fwuid: credentials.fwuid, app: 'one:one', loaded: {} }),
+      'aura.token': credentials.token,
+      'aura.isAction': 'true',
+    });
+    
+    try {
+      const response = await fetch('/aura?' + qp.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: `message=${encodeURIComponent(JSON.stringify(message))}`
+      });
+      
+      if (!response.ok) {
+        return { success: false, error: `HTTP ${response.status}` };
+      }
+      
+      const data = await response.json();
+      const action = data?.actions?.[0];
+      
+      if (!action || action.state !== 'SUCCESS') {
+        return { success: false, error: 'ACTION_FAILED', raw: data };
+      }
+      
+      return { success: true, returnValue: action.returnValue };
+    } catch (e) {
+      return { success: false, error: 'EXCEPTION', message: e.message };
+    }
+  }, JSON.stringify({
+    credentials,
+    phone,
+    smartScope: SMART_SCOPE_PHONE,
+    sessionId: searchDialogSessionId
+  }));
+  
+  if (!result.success) {
+    log.error('SOSL', 'getAnswers search failed', result);
+    return { found: false, error: result.error };
+  }
+  
+  // Parse KEYWORD_SEARCH results
+  const answers = result.returnValue?.answers || [];
+  log.debug('SOSL', `getAnswers returned ${answers.length} answer categories`);
+  
+  for (const answer of answers) {
+    if (answer.type === 'KEYWORD_SEARCH' && answer.data?.results) {
+      for (const resultGroup of answer.data.results) {
+        const results = resultGroup.result || [];
+        
+        for (const item of results) {
+          const record = item.record || {};
+          const id = item.recordId || record.Id || '';
+          
+          // Check if it's an Account (ID prefix 001)
+          if (id.startsWith('001')) {
+            const accountName = record.Name || '';
+            const accountPhone = record.Phone || '';
+            log.info('SOSL', `Found account via getAnswers: ${accountName} (${id}), Phone: ${accountPhone}`);
+            
+            return {
+              found: true,
+              accountId: id,
+              accountName: accountName,
+              phone: accountPhone,
+              email: record.Primary_Email__c || record.PersonEmail || '',
+              matchedBy: 'phone_sosl'
+            };
+          }
+        }
+      }
+    }
+  }
+  
+  log.debug('SOSL', 'No accounts found via getAnswers');
+  return { found: false };
+}
+
+// ============================================================================
+// SOQL SEARCH FOR PHONE/EMAIL (via REST API)
+// ============================================================================
+
+/**
+ * Search account by SOQL query on a specific field (Phone, PersonEmail, etc.)
+ * Uses Salesforce REST API with session ID from Playwright cookies.
+ *
+ * @param {Page} page - Playwright page
+ * @param {Object} credentials - Aura credentials (token, fwuid)
+ * @param {string} field - Field to search (Phone, PersonEmail, etc.)
+ * @param {string} value - Value to search for
+ * @returns {Promise<{ found: boolean, accountId?: string, accountName?: string }>}
+ */
+async function searchBySOQL(page, credentials, field, value) {
+  log.info('SOQL', `Searching Account by ${field}="${value}"`);
+  
+  // Build SOQL query - escape single quotes
+  const escapedValue = value.replace(/'/g, "\\'");
+  
+  // Build LIKE pattern for partial phone matching
+  // Phone "(819) 333-2623" should match "8193332623" or "(819) 333-2623"
+  const isPhoneSearch = field === 'Phone';
+  let whereClause;
+  
+  if (isPhoneSearch) {
+    // For phone: try exact match OR match with LIKE on digits
+    const digitsOnly = value.replace(/\D/g, '');
+    // Use LIKE with wildcards to match different formats
+    whereClause = `Phone LIKE '%${digitsOnly.slice(-10)}%'`;
+    log.debug('SOQL', `Phone search using LIKE pattern: ${whereClause}`);
+  } else {
+    whereClause = `${field} = '${escapedValue}'`;
+  }
+  
+  const soqlQuery = `SELECT Id, Name, Phone, PersonEmail FROM Account WHERE ${whereClause} LIMIT 5`;
+  log.debug('SOQL', `Query: ${soqlQuery}`);
+  
+  // Extract session ID from Playwright cookies (HttpOnly cookies not accessible via document.cookie)
+  const context = page.context();
+  const cookies = await context.cookies();
+  const sidCookie = cookies.find(c => c.name === 'sid');
+  
+  if (!sidCookie) {
+    // Log available cookie names for debugging
+    const cookieNames = cookies.map(c => c.name);
+    log.warn('SOQL', 'No sid cookie found', { availableCookies: cookieNames.slice(0, 20) });
+    return { found: false, error: 'NO_SESSION_ID' };
+  }
+  
+  const sessionId = sidCookie.value;
+  log.debug('SOQL', `Session ID extracted (length: ${sessionId.length})`);
+  
+  // Execute SOQL via REST API
+  const result = await page.evaluate(async ({ query, sessionId }) => {
+    try {
+      const apiVersion = '58.0';
+      const response = await fetch(`/services/data/v${apiVersion}/query?q=${encodeURIComponent(query)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${sessionId}`,
+        },
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          error: `HTTP ${response.status}`,
+          message: errorText,
+          statusCode: response.status,
+        };
+      }
+      
+      const data = await response.json();
+      
+      return {
+        success: true,
+        totalSize: data.totalSize,
+        records: data.records || [],
+        done: data.done,
+      };
+    } catch (e) {
+      return {
+        success: false,
+        error: 'EXCEPTION',
+        message: e.message,
+      };
+    }
+  }, { query: soqlQuery, sessionId });
+  
+  log.debug('SOQL', 'Query result', {
+    success: result.success,
+    totalSize: result.totalSize,
+    recordCount: result.records?.length,
+    error: result.error,
+    message: result.message,
+  });
+  
+  if (!result.success) {
+    log.warn('SOQL', `SOQL query failed: ${result.error} - ${result.message}`);
+    return { found: false, error: result.error };
+  }
+  
+  if (result.totalSize === 0 || !result.records || result.records.length === 0) {
+    log.info('SOQL', `No Account found with ${field}="${value}"`);
+    return { found: false };
+  }
+  
+  // Found account(s) - take the first one
+  const account = result.records[0];
+  log.info('SOQL', `Account found via SOQL: ${account.Name} (${account.Id})`, {
+    phone: account.Phone,
+    email: account.PersonEmail,
+  });
+  
+  return {
+    found: true,
+    accountId: account.Id,
+    accountName: account.Name,
+  };
 }
 
 // ============================================================================

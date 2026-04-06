@@ -38,6 +38,13 @@
 - **SSO Redirect Page**: Salesforce sometimes shows a login redirect page even with valid cookies. URL is `indall.my.salesforce.com` with SSO button. Must click "Se connecter avec Single Sign-On" to proceed.
 - **Search API descriptor**: `serviceComponent://ui.search.components.forcesearch.assistant.AssistantSuggestionsDataProviderController/ACTION$getSuggestions`
 - **Search API response structure**: `{ answers: [{ type: "...", data: [{ record: {...}, scopeMap: {...} }] }] }` - records are nested inside `answers[0].data[i].record`
+- **PHONE SEARCH SOLUTION (2026-04-06)**:
+  - `getSuggestions` (typeahead) does NOT search Phone field - only works for name search
+  - `getAnswers` (SOSL-based) DOES search Phone field - triggered when pressing ENTER in SF search bar
+  - **Working endpoint**: `PredictedResultsDataProviderController/ACTION$getAnswers`
+  - **Key param**: `withSingleSOSL: true` enables SOSL which searches Phone
+  - **SMART_SCOPE** must include Account with Phone field and ContactPointPhone entity
+  - Response structure: `returnValue.answers[].data.results[].result[].record`
 
 ## System improvements (TODO)
 
