@@ -19,6 +19,10 @@ import dotenv from 'dotenv';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Salesforce configuration
+const SF_HOME_URL = 'https://indall.lightning.force.com/lightning/page/home';
+const SEARCH_DESCRIPTOR = 'serviceComponent://ui.search.components.forcesearch.assistant.AssistantSuggestionsDataProviderController/ACTION$getSuggestions';
+
 // ============================================================================
 // ENVIRONMENT CONFIGURATION (using dotenv)
 // ============================================================================
@@ -423,6 +427,10 @@ async function getAuthModule() {
       ensureSession,
       AUTH_DIR,
       BROWSER_PROFILE,
+      // Export for Salesforce module
+      chromium,
+      restoreCookies,
+      saveCookies,
     };
     
     return authModule;
@@ -430,6 +438,306 @@ async function getAuthModule() {
     log.error('AUTH', 'Failed to initialize auth module', e);
     throw e;
   }
+}
+
+// ============================================================================
+// SALESFORCE MODULE - Account Search via Aura API
+// ============================================================================
+
+/**
+ * Search for a Salesforce Account by phone, email, or name.
+ * Uses the Aura API via Playwright browser context.
+ *
+ * Search order: phone → email → name
+ * Returns as soon as a match is found.
+ *
+ * @param {Object} params - Search parameters
+ * @param {string} [params.phone] - Phone number (10 digits)
+ * @param {string} [params.email] - Email address
+ * @param {string} [params.firstName] - First name
+ * @param {string} [params.lastName] - Last name
+ * @returns {Promise<{ found: boolean, accountId?: string, accountName?: string, matchedBy?: string, error?: string }>}
+ */
+async function searchAccount({ phone, email, firstName, lastName }) {
+  log.info('AURA', 'Starting account search', { phone: phone ? '***' : null, email: email ? '***' : null, name: `${firstName} ${lastName}` });
+  
+  const auth = await getAuthModule();
+  const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
+  
+  let context;
+  try {
+    // Launch browser with persistent context
+    context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+      headless: false,
+      viewport: { width: 1280, height: 900 },
+      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+    });
+    
+    // Restore cookies
+    await restoreCookies(context);
+    
+    const page = context.pages()[0] || await context.newPage();
+    
+    // Navigate to Salesforce Lightning
+    log.debug('AURA', 'Navigating to Salesforce...');
+    await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+    
+    // Check if Aura is available
+    const auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
+    if (!auraAvailable) {
+      log.warn('AURA', 'Aura framework not available - may need authentication');
+      return { found: false, error: 'SESSION_REQUIRED', message: 'Salesforce session required. Please login first.' };
+    }
+    
+    // Capture Aura credentials
+    log.debug('AURA', 'Capturing Aura credentials...');
+    const credentials = await captureAuraCredentials(page);
+    if (!credentials) {
+      return { found: false, error: 'CREDENTIALS_CAPTURE_FAILED', message: 'Could not capture Aura credentials' };
+    }
+    
+    log.debug('AURA', 'Credentials captured successfully');
+    
+    // Search by phone first (most precise)
+    if (phone) {
+      const cleanPhone = phone.replace(/\D/g, ''); // Remove non-digits
+      if (cleanPhone.length >= 10) {
+        log.debug('AURA', 'Searching by phone...');
+        const result = await searchByTerm(page, credentials, cleanPhone);
+        if (result.found) {
+          result.matchedBy = 'phone';
+          await saveCookies(context);
+          await context.close();
+          return result;
+        }
+      }
+    }
+    
+    // Search by email
+    if (email) {
+      log.debug('AURA', 'Searching by email...');
+      const result = await searchByTerm(page, credentials, email);
+      if (result.found) {
+        result.matchedBy = 'email';
+        await saveCookies(context);
+        await context.close();
+        return result;
+      }
+    }
+    
+    // Search by name
+    if (firstName || lastName) {
+      const fullName = `${firstName || ''} ${lastName || ''}`.trim();
+      if (fullName) {
+        log.debug('AURA', 'Searching by name...');
+        const result = await searchByTerm(page, credentials, fullName);
+        if (result.found) {
+          result.matchedBy = 'name';
+          await saveCookies(context);
+          await context.close();
+          return result;
+        }
+      }
+    }
+    
+    // No match found
+    log.info('AURA', 'No account found');
+    await saveCookies(context);
+    await context.close();
+    return { found: false };
+    
+  } catch (e) {
+    log.error('AURA', 'Search error', e);
+    if (context) await context.close().catch(() => {});
+    
+    if (e.message.includes('lock') || e.message.includes('already in use')) {
+      return { found: false, error: 'BROWSER_PROFILE_LOCKED', message: 'Browser already open' };
+    }
+    
+    return { found: false, error: 'SEARCH_ERROR', message: e.message };
+  }
+}
+
+/**
+ * Capture Aura credentials from page requests.
+ */
+async function captureAuraCredentials(page, timeout = 15000) {
+  return new Promise(async (resolve) => {
+    let resolved = false;
+    
+    const handler = (request) => {
+      if (resolved) return;
+      if (request.url().includes('/aura') && request.method() === 'POST') {
+        const postData = request.postData();
+        if (!postData) return;
+        
+        try {
+          const params = new URLSearchParams(postData);
+          const contextStr = params.get('aura.context');
+          const token = params.get('aura.token');
+          
+          if (contextStr) {
+            const context = JSON.parse(contextStr);
+            if (context.fwuid) {
+              resolved = true;
+              page.off('request', handler);
+              resolve({
+                context,
+                token: (token && token !== 'undefined') ? token : null,
+              });
+            }
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+    };
+    
+    page.on('request', handler);
+    
+    // Trigger an action to force Aura request
+    await page.waitForTimeout(2000);
+    if (!resolved) {
+      try {
+        const searchBar = await page.$('input[type="search"], button[title="Search"], .search-button');
+        if (searchBar) {
+          await searchBar.click({ timeout: 2000 }).catch(() => {});
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+    
+    // Timeout
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        page.off('request', handler);
+        resolve(null);
+      }
+    }, timeout);
+  });
+}
+
+/**
+ * Search for an account by a search term using Aura API.
+ */
+async function searchByTerm(page, credentials, term) {
+  const result = await page.evaluate(async (argsJson) => {
+    const { credentials, term, descriptor } = JSON.parse(argsJson);
+    
+    const message = {
+      actions: [{
+        id: '1;a',
+        descriptor: descriptor,
+        callingDescriptor: 'UNKNOWN',
+        params: {
+          term: term,
+          entityName: 'Account',
+          maxRecords: 10,
+          maxQueries: 0,
+          maxTips: 0,
+          maxListViews: 0,
+          context: { FILTERS: {} },
+          configurationName: 'GLOBAL_SEARCH_BAR',
+        },
+      }],
+    };
+    
+    const body = new URLSearchParams();
+    body.append('message', JSON.stringify(message));
+    body.append('aura.context', JSON.stringify(credentials.context));
+    body.append('aura.token', credentials.token || 'undefined');
+    
+    const qp = new URLSearchParams({
+      'ui-search-components-forcesearch-assistant.AssistantSuggestionsDataProvider.getSuggestions': '1',
+      'r': '1',
+    });
+    
+    try {
+      const response = await fetch('/aura?' + qp.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: body.toString(),
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        return { found: false, error: `HTTP ${response.status}` };
+      }
+      
+      const rawText = await response.text();
+      
+      // Extract first JSON object
+      const firstBrace = rawText.indexOf('{');
+      if (firstBrace === -1) {
+        return { found: false, error: 'No JSON in response' };
+      }
+      
+      let depth = 0, inString = false, escape = false, start = -1;
+      for (let i = firstBrace; i < rawText.length; i++) {
+        const ch = rawText[i];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\' && inString) { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === '{') { if (depth === 0) start = i; depth++; }
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0 && start !== -1) {
+            const jsonStr = rawText.substring(start, i + 1);
+            const data = JSON.parse(jsonStr);
+            
+            // Parse response
+            const actions = data.actions || [];
+            if (actions.length === 0 || actions[0].state !== 'SUCCESS') {
+              return { found: false };
+            }
+            
+            const returnValue = actions[0].returnValue || {};
+            
+            // Extract records from various response structures
+            let records = [];
+            if (returnValue.records && Array.isArray(returnValue.records)) {
+              records = returnValue.records;
+            } else if (returnValue.suggestions?.records) {
+              records = returnValue.suggestions.records;
+            } else if (returnValue.answers && Array.isArray(returnValue.answers)) {
+              for (const answer of returnValue.answers) {
+                if (answer.data && Array.isArray(answer.data)) {
+                  records.push(...answer.data);
+                } else if (answer.records) {
+                  records.push(...answer.records);
+                }
+              }
+            }
+            
+            // Find Account records (ID starts with 001)
+            for (const rawRecord of records) {
+              const record = rawRecord.record || rawRecord;
+              const id = record.Id || record.id || record.recordId || '';
+              if (id.startsWith('001')) {
+                return {
+                  found: true,
+                  accountId: id,
+                  accountName: record.Name || record.name || `${record.FirstName || ''} ${record.LastName || ''}`.trim(),
+                };
+              }
+            }
+            
+            return { found: false };
+          }
+        }
+      }
+      
+      return { found: false, error: 'Could not parse response' };
+    } catch (e) {
+      return { found: false, error: e.message };
+    }
+  }, JSON.stringify({ credentials, term, descriptor: SEARCH_DESCRIPTOR }));
+  
+  return result;
 }
 
 // ============================================================================
@@ -637,6 +945,28 @@ ipcMain.handle('app:getUserDataPath', () => {
 // Get environment config (for UI conditional display)
 ipcMain.handle('app:getEnvConfig', () => {
   return ENV_CONFIG;
+});
+
+// ─── Salesforce ───────────────────────────────────────────────────────────────
+
+// Search for an account by phone, email, or name
+ipcMain.handle('salesforce:searchAccount', async (event, params) => {
+  try {
+    log.debug('IPC', 'salesforce:searchAccount called', {
+      hasPhone: !!params.phone,
+      hasEmail: !!params.email,
+      hasFirstName: !!params.firstName,
+      hasLastName: !!params.lastName,
+    });
+    return await searchAccount(params);
+  } catch (e) {
+    log.error('IPC', 'salesforce:searchAccount error', e);
+    return {
+      found: false,
+      error: 'UNKNOWN',
+      message: e.message,
+    };
+  }
 });
 
 // ============================================================================

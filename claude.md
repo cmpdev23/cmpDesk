@@ -1297,3 +1297,112 @@ src/modules/{name}/
 - `src/components/forms/` (moved to `src/components/ui/`)
 - `src/lib/opportunity/` (moved to `src/modules/dossiers/types/` and `src/modules/dossiers/lib/`)
 
+---
+
+## Milestone — Account Search Feature (2026-04-06)
+
+### Overview
+
+Implemented Salesforce Account search functionality in Step 1 of the Dossier form.
+The search checks if a client account already exists before creating a new one.
+
+### Search Strategy
+
+Search order (returns on first match):
+1. **Phone** — Most precise, 10-digit number
+2. **Email** — Secondary match
+3. **Name** — Fallback (firstName + lastName)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         RENDERER PROCESS                        │
+│  ┌──────────────────────────────┐                               │
+│  │ OpportunityFormStepCompte.tsx │                              │
+│  │ - Form fields (name, phone, email)                           │
+│  │ - Search button                                              │
+│  │ - Result indicator (found/not-found/error)                   │
+│  └──────────────────────────────┘                               │
+│                    │                                            │
+│                    │ window.electronAPI.salesforce.searchAccount()
+│                    ▼                                            │
+└─────────────────────────────────────────────────────────────────┘
+                     │ IPC
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                          MAIN PROCESS                           │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ ipcMain.handle('salesforce:searchAccount')               │  │
+│  │ → searchAccount({ phone, email, firstName, lastName })   │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                    │                                            │
+│                    ▼                                            │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ Aura Search via Playwright                               │  │
+│  │ 1. Launch browser with persistent context                │  │
+│  │ 2. Navigate to SF Lightning                              │  │
+│  │ 3. Capture Aura credentials (fwuid + token)              │  │
+│  │ 4. Call getSuggestions API                               │  │
+│  │ 5. Parse results, filter Account records (001...)        │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `electron/main.js` | Modified | Added `searchAccount()`, `captureAuraCredentials()`, `searchByTerm()` functions + IPC handler |
+| `electron/preload.js` | Modified | Added `salesforceAPI.searchAccount()` |
+| `src/types/electron.d.ts` | Modified | Added `AccountSearchParams`, `AccountSearchResult`, `SalesforceAPI` types |
+| `src/lib/salesforce/types.ts` | Created | TypeScript types for Salesforce operations |
+| `src/lib/salesforce/index.ts` | Created | Barrel export for Salesforce module |
+| `src/modules/dossiers/types/index.ts` | Modified | Added `AccountSearchState` type |
+| `src/modules/dossiers/index.ts` | Modified | Export `AccountSearchState` |
+| `src/modules/dossiers/components/OpportunityFormStepCompte.tsx` | Modified | Added search button + result indicators |
+| `src/pages/Dossiers.tsx` | Modified | Added `accountSearchState` + `handleAccountFound()` |
+
+### API Used
+
+**Aura Search Descriptor:**
+```
+serviceComponent://ui.search.components.forcesearch.assistant.AssistantSuggestionsDataProviderController/ACTION$getSuggestions
+```
+
+### UI States
+
+| State | Indicator | Description |
+|-------|-----------|-------------|
+| `idle` | Helper text | Initial state, shows instructions |
+| `searching` | ⏳ spinner | Search in progress |
+| `found` | ✅ green badge | Account found, shows name + match method |
+| `not-found` | ℹ️ amber badge | No account, will create new |
+| `error` | ❌ red badge | Search failed, shows error message |
+
+### Usage
+
+```typescript
+// From renderer process
+const result = await window.electronAPI.salesforce.searchAccount({
+  phone: '5141234567',
+  email: 'client@example.com',
+  firstName: 'Jean',
+  lastName: 'Dupont',
+});
+
+if (result.found) {
+  console.log('Account ID:', result.accountId);
+  console.log('Account Name:', result.accountName);
+  console.log('Matched by:', result.matchedBy); // 'phone' | 'email' | 'name'
+} else {
+  console.log('No account found, will create new');
+}
+```
+
+### Next Steps
+
+- [ ] Use `accountSearchState.accountId` during Opportunity creation (link to existing account)
+- [ ] Add "Créer un nouveau compte" explicit option when account is found
+- [ ] Cache search results to avoid repeated API calls
+

@@ -156,6 +156,33 @@ const logsAPI = {
 };
 
 // ============================================================================
+// SALESFORCE API
+// ============================================================================
+
+const salesforceAPI = {
+  /**
+   * Search for an account by phone, email, or name.
+   *
+   * Search order: phone → email → name (returns on first match)
+   *
+   * @param {Object} params
+   * @param {string} [params.phone] - Phone number (10 digits)
+   * @param {string} [params.email] - Email address
+   * @param {string} [params.firstName] - First name
+   * @param {string} [params.lastName] - Last name
+   * @returns {Promise<{
+   *   found: boolean,
+   *   accountId?: string,
+   *   accountName?: string,
+   *   matchedBy?: 'phone' | 'email' | 'name',
+   *   error?: string,
+   *   message?: string
+   * }>}
+   */
+  searchAccount: (params) => ipcRenderer.invoke('salesforce:searchAccount', params),
+};
+
+// ============================================================================
 // EXPOSE TO RENDERER
 // ============================================================================
 
@@ -164,9 +191,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   auth: authAPI,
   logs: logsAPI,
   theme: themeAPI,
+  salesforce: salesforceAPI,
 });
 
 console.log('🚀 cmpDesk preload script loaded');
 console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
+console.log('   Available APIs: electronAPI.salesforce.{searchAccount}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');

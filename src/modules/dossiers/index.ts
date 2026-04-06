@@ -18,6 +18,7 @@ export { DossierPageHeader } from './components/DossierPageHeader';
 // Types
 export type {
   AccountStepData,
+  AccountSearchState,
   OpportunityStep1Data,
   CaseStep2Data,
   OpportunityFormData,

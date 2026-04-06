@@ -18,6 +18,20 @@ export interface AccountStepData {
 }
 
 /**
+ * Account search result state - stored after searching for existing account
+ */
+export interface AccountSearchState {
+  /** Whether an account was found */
+  found: boolean;
+  /** Salesforce Account ID (001...) if found */
+  accountId?: string;
+  /** Account name if found */
+  accountName?: string;
+  /** How the account was matched */
+  matchedBy?: 'phone' | 'email' | 'name';
+}
+
+/**
  * Step 2 form data - Informations générales
  */
 export interface OpportunityStep1Data {

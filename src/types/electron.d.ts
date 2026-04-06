@@ -105,6 +105,41 @@ export interface ThemeAPI {
 }
 
 // ============================================================================
+// SALESFORCE API
+// ============================================================================
+
+export interface AccountSearchParams {
+  /** Phone number (10 digits) */
+  phone?: string;
+  /** Email address */
+  email?: string;
+  /** First name */
+  firstName?: string;
+  /** Last name */
+  lastName?: string;
+}
+
+export interface AccountSearchResult {
+  /** Whether an account was found */
+  found: boolean;
+  /** Salesforce Account ID (001...) */
+  accountId?: string;
+  /** Account name (FirstName + LastName) */
+  accountName?: string;
+  /** Search method that found the account */
+  matchedBy?: 'phone' | 'email' | 'name';
+  /** Error code if search failed */
+  error?: 'SESSION_REQUIRED' | 'CREDENTIALS_CAPTURE_FAILED' | 'BROWSER_PROFILE_LOCKED' | 'SEARCH_ERROR' | 'UNKNOWN';
+  /** Human-readable error message */
+  message?: string;
+}
+
+export interface SalesforceAPI {
+  /** Search for an account by phone, email, or name */
+  searchAccount: (params: AccountSearchParams) => Promise<AccountSearchResult>;
+}
+
+// ============================================================================
 // ELECTRON API
 // ============================================================================
 
@@ -116,6 +151,7 @@ export interface ElectronAPI {
   auth: AuthAPI;
   logs: LogsAPI;
   theme: ThemeAPI;
+  salesforce: SalesforceAPI;
 }
 
 declare global {

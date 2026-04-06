@@ -25,7 +25,7 @@ import {
   DEFAULT_STEP2_DATA,
   DossierPageHeader,
 } from '@/modules/dossiers';
-import type { AccountStepData, OpportunityStep1Data, CaseStep2Data } from '@/modules/dossiers';
+import type { AccountStepData, AccountSearchState, OpportunityStep1Data, CaseStep2Data } from '@/modules/dossiers';
 import { Button } from '@/components/ui/button';
 
 // DEV mode flag — skip validation when true
@@ -43,6 +43,9 @@ function Dossiers() {
   const [accountData, setAccountData] = useState<AccountStepData>(DEFAULT_ACCOUNT_DATA);
   const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
   const [step2Data, setStep2Data] = useState<CaseStep2Data>(DEFAULT_STEP2_DATA);
+
+  // Account search state - stores result of Salesforce account search
+  const [accountSearchState, setAccountSearchState] = useState<AccountSearchState | null>(null);
 
   // Form errors (will be used for validation)
   const [accountErrors, setAccountErrors] = useState<Record<string, string>>({});
@@ -167,6 +170,23 @@ function Dossiers() {
     if (Object.keys(accountErrors).length > 0) {
       setAccountErrors({});
     }
+    // Reset account search state when user modifies contact data
+    if (accountSearchState) {
+      setAccountSearchState(null);
+    }
+  };
+
+  /**
+   * Called when an account is found via Salesforce search.
+   * Stores the account ID for use during Opportunity creation.
+   */
+  const handleAccountFound = (accountId: string, accountName: string) => {
+    setAccountSearchState({
+      found: true,
+      accountId,
+      accountName,
+    });
+    console.log('Account found:', { accountId, accountName });
   };
 
   const handleStep1Change = (data: OpportunityStep1Data) => {
@@ -207,6 +227,7 @@ function Dossiers() {
                 data={accountData}
                 onChange={handleAccountChange}
                 errors={accountErrors}
+                onAccountFound={handleAccountFound}
               />
             )}
 
@@ -250,7 +271,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ accountData, step1Data, step2Data }, null, 2)}
+                  {JSON.stringify({ accountData, accountSearchState, step1Data, step2Data }, null, 2)}
                 </pre>
               </details>
             )}
