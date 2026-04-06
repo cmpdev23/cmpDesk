@@ -6,3 +6,4 @@ auth/browser_profile/
 data/journeys/journeys.json
 journeys.json
 py_utils/
+note.txt
