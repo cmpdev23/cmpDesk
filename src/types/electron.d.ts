@@ -134,9 +134,73 @@ export interface AccountSearchResult {
   message?: string;
 }
 
+// ============================================================================
+// DOSSIER CREATION
+// ============================================================================
+
+export interface CreateDossierOpportunityData {
+  /** Opportunity_Category__c - e.g., "Gobal Offer" */
+  opportunityCategory?: string;
+  /** Product_Interest__c - e.g., "Life Insurance" */
+  productInterest?: string;
+  /** Subsidiary__c - e.g., "iA" */
+  subsidiary?: string;
+  /** Proposal_Number__c */
+  proposalNumber?: string;
+  /** Contract_Number__c */
+  contractNumber?: string;
+  /** Transaction_Date__c (YYYY-MM-DD) */
+  transactionDate?: string;
+  /** Annual_Premium__c */
+  annualPremium?: string;
+}
+
+export interface CreateDossierCaseData {
+  /** Product_Family__c - e.g., "Insurance" */
+  productFamily?: string;
+  /** Transaction_Category__c - e.g., "New Contract" */
+  transactionCategory?: string;
+  /** Transaction_Sub_Category__c - e.g., "Without Replacement" */
+  transactionSubCategory?: string;
+  /** SignatureType__c - e.g., "Electronic" */
+  signatureType?: string;
+  /** CustomersPlaceOfResidence__c - e.g., "Quebec" */
+  customersPlaceOfResidence?: string;
+  /** ProductType__c - e.g., "Life Insurance" */
+  productType?: string;
+}
+
+export interface CreateDossierParams {
+  /** Salesforce Account ID (001...) - required */
+  accountId: string;
+  /** Opportunity fields */
+  opportunityData: CreateDossierOpportunityData;
+  /** Case fields */
+  caseData: CreateDossierCaseData;
+}
+
+export interface CreateDossierResult {
+  /** Whether dossier creation was fully successful */
+  success: boolean;
+  /** Salesforce Opportunity ID (006...) */
+  opportunityId?: string;
+  /** URL to the Opportunity in Salesforce */
+  opportunityUrl?: string;
+  /** Salesforce Case ID (500...) */
+  caseId?: string;
+  /** URL to the Case in Salesforce */
+  caseUrl?: string;
+  /** Error message if failed */
+  error?: string;
+  /** Warning message if partially successful */
+  warning?: string;
+}
+
 export interface SalesforceAPI {
   /** Search for an account by phone, email, or name */
   searchAccount: (params: AccountSearchParams) => Promise<AccountSearchResult>;
+  /** Create a complete dossier (Opportunity + Case) */
+  createDossier: (params: CreateDossierParams) => Promise<CreateDossierResult>;
 }
 
 // ============================================================================

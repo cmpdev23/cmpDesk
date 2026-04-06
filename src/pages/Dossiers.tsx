@@ -36,8 +36,15 @@ import type {
   CaseStep2Data,
   SearchStepStatus,
 } from '@/modules/dossiers';
-import type { AccountSearchResult } from '@/types/electron';
+import type { AccountSearchResult, CreateDossierResult } from '@/types/electron';
 import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 // DEV mode flag — skip validation when true
 const IS_DEV = import.meta.env.DEV;
@@ -90,6 +97,10 @@ function Dossiers() {
   const [accountErrors, setAccountErrors] = useState<Record<string, string>>({});
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
   const [step2Errors, setStep2Errors] = useState<Record<string, string>>({});
+
+  // Submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<CreateDossierResult | null>(null);
 
   // ─── Validation Functions ─────────────────────────────────────────────────────
 
@@ -243,7 +254,7 @@ function Dossiers() {
     setCurrentStep('opportunity');
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Final submission — validate all steps unless DEV mode
     const accountValid = validateAccount();
     const step1Valid = validateStep1();
@@ -262,8 +273,51 @@ function Dossiers() {
       return;
     }
 
-    // TODO: Submit to Salesforce API
+    // Check that we have an account to use (existing account workflow only for now)
+    if (!accountSearchState?.found || !accountSearchState?.accountId) {
+      console.error('No account selected - cannot create dossier');
+      return;
+    }
+
+    // Start submission
+    setIsSubmitting(true);
+    setSubmitResult(null);
+
     console.log('Submitting form data:', { accountData, accountSearchState, step1Data, step2Data });
+
+    try {
+      const result = await window.electronAPI.salesforce.createDossier({
+        accountId: accountSearchState.accountId,
+        opportunityData: {
+          opportunityCategory: step1Data.opportunityCategory,
+          productInterest: step1Data.productInterest,
+          subsidiary: step1Data.subsidiary,
+          proposalNumber: step1Data.proposalNumber,
+          contractNumber: step1Data.contractNumber,
+          transactionDate: step1Data.transactionDate,
+          annualPremium: step1Data.annualPremium,
+        },
+        caseData: {
+          productFamily: step2Data.productFamily,
+          transactionCategory: step2Data.transactionCategory,
+          transactionSubCategory: step2Data.transactionSubCategory,
+          signatureType: step2Data.signatureType,
+          customersPlaceOfResidence: step2Data.customersPlaceOfResidence,
+          productType: step2Data.productType,
+        },
+      });
+
+      console.log('Dossier creation result:', result);
+      setSubmitResult(result);
+    } catch (err) {
+      console.error('Dossier creation error:', err);
+      setSubmitResult({
+        success: false,
+        error: err instanceof Error ? err.message : 'Erreur inconnue',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ─── Form Data Handlers ───────────────────────────────────────────────────────
@@ -358,22 +412,87 @@ function Dossiers() {
               />
             )}
 
+            {/* Submission Result */}
+            {submitResult && (
+              <Card className={`mt-6 pl-1 border ${submitResult.success ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
+                <CardHeader>
+                  <CardTitle className={submitResult.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                    {submitResult.success ? '✅ Dossier créé avec succès' : '❌ Erreur lors de la création'}
+                  </CardTitle>
+                  <CardDescription>
+                    {submitResult.success
+                      ? 'L\'Opportunity et le Case ont été créés dans Salesforce'
+                      : submitResult.error
+                    }
+                  </CardDescription>
+                </CardHeader>
+                {submitResult.success && (
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">Opportunity ID:</span>
+                      <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.opportunityId}</code>
+                    </div>
+                    {submitResult.caseId && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">Case ID:</span>
+                        <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.caseId}</code>
+                      </div>
+                    )}
+                    {submitResult.warning && (
+                      <p className="text-sm text-amber-600 dark:text-amber-400">
+                        ⚠️ {submitResult.warning}
+                      </p>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
             {/* Navigation buttons - hidden during search-result step (it has its own) */}
-            {!isSearchResultStep && (
+            {!isSearchResultStep && !submitResult?.success && (
               <div className="flex justify-between mt-6">
                 <Button
                   variant="secondary"
-                  disabled={currentStep === 'account'}
+                  disabled={currentStep === 'account' || isSubmitting}
                   onClick={handlePrevious}
                 >
                   ← Précédent
                 </Button>
 
                 {currentStep === 'case' ? (
-                  <Button onClick={handleSubmit}>Créer le dossier</Button>
+                  <Button onClick={handleSubmit} disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <span className="mr-2 animate-spin">⏳</span>
+                        Création en cours...
+                      </>
+                    ) : (
+                      'Créer le dossier'
+                    )}
+                  </Button>
                 ) : (
                   <Button onClick={handleNext}>Suivant →</Button>
                 )}
+              </div>
+            )}
+
+            {/* New dossier button (after success) */}
+            {submitResult?.success && (
+              <div className="flex justify-center mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    // Reset form for new dossier
+                    setCurrentStep('account');
+                    setAccountData(DEFAULT_ACCOUNT_DATA);
+                    setStep1Data(DEFAULT_STEP1_DATA);
+                    setStep2Data(DEFAULT_STEP2_DATA);
+                    setAccountSearchState(null);
+                    setSubmitResult(null);
+                  }}
+                >
+                  Créer un nouveau dossier
+                </Button>
               </div>
             )}
 
@@ -384,7 +503,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data }, null, 2)}
+                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, submitResult }, null, 2)}
                 </pre>
               </details>
             )}

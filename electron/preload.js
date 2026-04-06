@@ -180,6 +180,30 @@ const salesforceAPI = {
    * }>}
    */
   searchAccount: (params) => ipcRenderer.invoke('salesforce:searchAccount', params),
+  
+  /**
+   * Create a complete dossier (Opportunity + Case).
+   *
+   * Workflow:
+   * 1. Create Opportunity linked to Account
+   * 2. SF auto-creates Case linked to Opportunity
+   * 3. Update Case with additional fields
+   *
+   * @param {Object} params
+   * @param {string} params.accountId - Salesforce Account ID (required)
+   * @param {Object} params.opportunityData - Opportunity fields
+   * @param {Object} params.caseData - Case fields
+   * @returns {Promise<{
+   *   success: boolean,
+   *   opportunityId?: string,
+   *   opportunityUrl?: string,
+   *   caseId?: string,
+   *   caseUrl?: string,
+   *   error?: string,
+   *   warning?: string
+   * }>}
+   */
+  createDossier: (params) => ipcRenderer.invoke('salesforce:createDossier', params),
 };
 
 // ============================================================================
@@ -197,5 +221,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 console.log('🚀 cmpDesk preload script loaded');
 console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
-console.log('   Available APIs: electronAPI.salesforce.{searchAccount}');
+console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createDossier}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');

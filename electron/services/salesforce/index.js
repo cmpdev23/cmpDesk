@@ -1,14 +1,16 @@
 /**
  * Salesforce Service
- * 
+ *
  * Main entry point for all Salesforce operations.
- * Orchestrates authentication, credential capture, and search.
+ * Orchestrates authentication, credential capture, search, and record creation.
  */
 
 const { log } = require('../../lib/logger');
 const authService = require('../auth');
 const auraClient = require('./aura-client');
 const search = require('./search');
+const opportunity = require('./opportunity');
+const caseService = require('./case');
 
 // ============================================================================
 // STATE
@@ -200,6 +202,136 @@ async function searchAccount({ phone, email, firstName, lastName }) {
 }
 
 // ============================================================================
+// DOSSIER CREATION (Opportunity + Case)
+// ============================================================================
+
+/**
+ * Create a complete dossier (Opportunity + Case update)
+ *
+ * Workflow:
+ * 1. Create Opportunity with account reference
+ * 2. SF auto-creates a Case linked to the Opportunity
+ * 3. Update the Case with additional fields
+ *
+ * @param {Object} params - Dossier creation parameters
+ * @param {string} params.accountId - Salesforce Account ID (required)
+ * @param {Object} params.opportunity - Opportunity fields
+ * @param {Object} params.caseData - Case fields to update
+ * @returns {Promise<CreateDossierResult>}
+ */
+async function createDossier({ accountId, opportunityData, caseData }) {
+  log.info('SALESFORCE', 'Dossier creation initiated', { accountId });
+  
+  const result = {
+    success: false,
+    opportunityId: null,
+    opportunityUrl: null,
+    caseId: null,
+    caseUrl: null,
+    error: null,
+  };
+  
+  // Ensure we have a session
+  const { success, page } = await authService.ensureSession();
+  
+  if (!success || !page) {
+    result.error = 'Not authenticated';
+    return result;
+  }
+  
+  // Get Aura credentials
+  const credentials = await getCredentials();
+  
+  if (!credentials) {
+    result.error = 'Failed to capture Aura credentials';
+    return result;
+  }
+  
+  // Validate required fields
+  if (!accountId) {
+    result.error = 'accountId is required';
+    return result;
+  }
+  
+  // ── Step 1: Create Opportunity ──────────────────────────────────────────────
+  log.info('SALESFORCE', 'Step 1: Creating Opportunity...');
+  
+  const today = opportunity.getTodayDate();
+  
+  const opportunityFields = {
+    AccountId: accountId,
+    RecordTypeId: opportunity.OPPORTUNITY_RECORD_TYPE_ID,
+    CloseDate: today,
+    StageName: 'Closed Won',
+    Probability: 100,
+    // Custom fields from form
+    Opportunity_Category__c: opportunityData?.opportunityCategory || 'Gobal Offer',
+    Product_Interest__c: opportunityData?.productInterest || 'Life Insurance',
+    Subsidiary__c: opportunityData?.subsidiary || 'iA',
+    Proposal_Number__c: opportunityData?.proposalNumber || '',
+    Contract_Number__c: opportunityData?.contractNumber || '',
+    Transaction_Date__c: opportunityData?.transactionDate || today,
+    Annual_Premium__c: parseFloat(opportunityData?.annualPremium) || 0,
+  };
+  
+  const oppResult = await opportunity.createOpportunity(page, credentials, opportunityFields);
+  
+  if (!oppResult.success) {
+    result.error = `Opportunity creation failed: ${oppResult.error}`;
+    return result;
+  }
+  
+  result.opportunityId = oppResult.recordId;
+  result.opportunityUrl = oppResult.recordUrl;
+  
+  log.info('SALESFORCE', `Opportunity created: ${oppResult.recordId}`);
+  
+  // ── Step 2: Update Case ─────────────────────────────────────────────────────
+  // Note: Case is auto-created by SF trigger when Opportunity is created
+  // We need to wait a bit for the trigger to complete
+  log.info('SALESFORCE', 'Step 2: Waiting for Case creation...');
+  await page.waitForTimeout(2000); // Give SF time to create the Case
+  
+  log.info('SALESFORCE', 'Step 2: Updating Case...');
+  
+  const caseFields = {
+    Product_Family__c: caseData?.productFamily || 'Insurance',
+    Transaction_Category__c: caseData?.transactionCategory || 'New Contract',
+    Transaction_Sub_Category__c: caseData?.transactionSubCategory || 'Without Replacement',
+    SignatureType__c: caseData?.signatureType || 'Electronic',
+    CustomersPlaceOfResidence__c: caseData?.customersPlaceOfResidence || 'Quebec',
+    ProductType__c: caseData?.productType || 'Life Insurance',
+  };
+  
+  const caseResult = await caseService.updateCaseFromOpportunity(
+    page,
+    credentials,
+    oppResult.recordId,
+    caseFields
+  );
+  
+  if (!caseResult.success) {
+    // Opportunity was created but Case update failed
+    // Still return partial success with warning
+    log.warn('SALESFORCE', `Case update failed: ${caseResult.error}`);
+    result.success = true; // Partial success
+    result.warning = `Opportunity created but Case update failed: ${caseResult.error}`;
+    return result;
+  }
+  
+  result.caseId = caseResult.recordId;
+  result.caseUrl = caseResult.recordUrl;
+  result.success = true;
+  
+  log.info('SALESFORCE', 'Dossier creation complete', {
+    opportunityId: result.opportunityId,
+    caseId: result.caseId,
+  });
+  
+  return result;
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -211,7 +343,12 @@ module.exports = {
   // Account operations
   searchAccount,
   
+  // Dossier operations
+  createDossier,
+  
   // Re-export sub-modules for advanced use
   auraClient,
   search,
+  opportunity,
+  caseService,
 };

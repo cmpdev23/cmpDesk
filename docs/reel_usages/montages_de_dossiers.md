@@ -4,3 +4,14 @@
 4. Popup 2 (si iA)
 5. Clique sur requêtes.
 6. dépôt des documents.
+
+Popup :
+Objet : Nouveau contrat
+Famille de produit
+Catégorie de transactions
+Sous catégorie
+
+Popup 2 si iA :
+Type de signature
+Type de produit
+Lieu de résidence

@@ -710,6 +710,561 @@ async function searchAccount({ phone, email, firstName, lastName }) {
 }
 
 /**
+ * Create a dossier (Opportunity + Case update).
+ *
+ * This function:
+ * 1. Creates an Opportunity linked to the provided Account
+ * 2. Waits for Salesforce trigger to auto-create a Case
+ * 3. Updates the Case with additional fields
+ *
+ * @param {Object} params - Dossier parameters
+ * @param {string} params.accountId - The Salesforce Account ID
+ * @param {Object} params.opportunityData - Opportunity field values
+ * @param {Object} params.caseData - Case field values to update
+ * @returns {Promise<{ success: boolean, opportunityId?: string, opportunityUrl?: string, caseId?: string, caseUrl?: string, error?: string, warning?: string }>}
+ */
+async function createDossier({ accountId, opportunityData, caseData }) {
+  log.info('AURA', 'Starting dossier creation', { accountId, hasOppData: !!opportunityData, hasCaseData: !!caseData });
+  
+  const result = {
+    success: false,
+    opportunityId: null,
+    opportunityUrl: null,
+    caseId: null,
+    caseUrl: null,
+    error: null,
+    warning: null,
+  };
+  
+  if (!accountId) {
+    result.error = 'Account ID is required';
+    return result;
+  }
+  
+  const auth = await getAuthModule();
+  const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
+  
+  let context;
+  try {
+    // Launch browser with persistent context
+    context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+      headless: false,
+      viewport: { width: 1280, height: 900 },
+      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+    });
+    
+    await restoreCookies(context);
+    const page = context.pages()[0] || await context.newPage();
+    
+    // Navigate to Salesforce
+    log.debug('AURA', 'Navigating to Salesforce...');
+    await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+    
+    // Check if Aura is available
+    let auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
+    
+    if (!auraAvailable) {
+      log.warn('AURA', 'Aura not available - waiting for authentication...');
+      const authenticated = await waitForAuraAuthentication(page);
+      
+      if (!authenticated) {
+        result.error = 'Authentication timeout';
+        await context.close();
+        return result;
+      }
+      
+      await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(3000);
+    }
+    
+    // Capture Aura credentials
+    log.debug('AURA', 'Capturing Aura credentials...');
+    const credentials = await captureAuraCredentials(page);
+    if (!credentials) {
+      result.error = 'Could not capture Aura credentials';
+      await context.close();
+      return result;
+    }
+    
+    // ─── Step 1: Create Opportunity ───
+    log.info('AURA', 'Creating Opportunity...');
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Required fields based on model/scripts/seeds/opportunity.js
+    const opportunityFields = {
+      // Core required fields
+      AccountId: accountId,
+      RecordTypeId: '012Am0000004KaZIAU', // Confirmed RecordTypeId from SF
+      CloseDate: opportunityData?.closeDate || today,
+      StageName: opportunityData?.stageName || 'Closed Won', // API uses English values
+      Probability: 100,
+      
+      // Required custom fields (confirmed from API capture)
+      Opportunity_Category__c: opportunityData?.opportunityCategory || 'Gobal Offer', // Note: typo is in SF
+      Product_Interest__c: opportunityData?.productInterest || 'Life Insurance',
+      Subsidiary__c: opportunityData?.subsidiary || 'iA',
+      Proposal_Number__c: opportunityData?.proposalNumber || 'DRAFT',
+      Contract_Number__c: opportunityData?.contractNumber || 'DRAFT',
+      Transaction_Date__c: opportunityData?.transactionDate || today,
+      Annual_Premium__c: opportunityData?.annualPremium || 0,
+      
+      // Optional fields from form (only if provided)
+      ...(opportunityData?.typeActivite && { Type_d_activit__c: opportunityData.typeActivite }),
+      ...(opportunityData?.familleInteret && { Famille_d_int_r_t__c: opportunityData.familleInteret }),
+      ...(opportunityData?.interetProduit && { Int_r_t_produit__c: opportunityData.interetProduit }),
+      ...(opportunityData?.produit && { Produit__c: opportunityData.produit }),
+      ...(opportunityData?.provenance && { Provenance__c: opportunityData.provenance }),
+      ...(opportunityData?.typeVente && { Type_de_vente__c: opportunityData.typeVente }),
+      ...(opportunityData?.description && { Description: opportunityData.description }),
+    };
+    
+    // Log fields being sent
+    log.debug('AURA', 'Opportunity fields to create:', opportunityFields);
+    
+    const createOppResult = await page.evaluate(async ({ credentials, fields }) => {
+      const descriptor = 'aura://RecordUiController/ACTION$createRecord';
+      
+      const message = {
+        actions: [{
+          id: '1;a',
+          descriptor,
+          callingDescriptor: 'UNKNOWN',
+          params: {
+            recordInput: {
+              allowSaveOnDuplicate: false,
+              apiName: 'Opportunity',
+              fields: fields,
+            },
+          },
+        }],
+      };
+      
+      const body = new URLSearchParams();
+      body.append('message', JSON.stringify(message));
+      body.append('aura.context', JSON.stringify(credentials.context));
+      body.append('aura.token', credentials.token || 'undefined');
+      
+      // Use the same queryParams as the working implementation
+      const qp = new URLSearchParams({
+        'aura.RecordUi.createRecord': '1',
+        r: '1'
+      });
+      
+      try {
+        const response = await fetch('/aura?' + qp.toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+          body: body.toString(),
+          credentials: 'include',
+        });
+        
+        if (!response.ok) {
+          return { success: false, error: `HTTP ${response.status}` };
+        }
+        
+        const rawText = await response.text();
+        const firstBrace = rawText.indexOf('{');
+        if (firstBrace === -1) return { success: false, error: 'No JSON in response' };
+        
+        // Extract first JSON object
+        let depth = 0, inString = false, escape = false, start = -1;
+        for (let i = firstBrace; i < rawText.length; i++) {
+          const ch = rawText[i];
+          if (escape) { escape = false; continue; }
+          if (ch === '\\' && inString) { escape = true; continue; }
+          if (ch === '"') { inString = !inString; continue; }
+          if (inString) continue;
+          if (ch === '{') { if (depth === 0) start = i; depth++; }
+          else if (ch === '}') {
+            depth--;
+            if (depth === 0 && start !== -1) {
+              const jsonStr = rawText.substring(start, i + 1);
+              const data = JSON.parse(jsonStr);
+              
+              const actions = data.actions || [];
+              if (actions.length === 0) return { success: false, error: 'No actions in response', _debug: { data } };
+              
+              const action = actions[0];
+              if (action.state !== 'SUCCESS') {
+                // Return full error details for debugging
+                // action.error can be an array or object
+                const errors = Array.isArray(action.error) ? action.error : [action.error];
+                const firstError = errors[0] || {};
+                const errorMsg = firstError.message || firstError.exceptionMessage || firstError.errorCode || 'Action failed';
+                const fieldErrors = firstError.fieldErrors || firstError.data?.fieldErrors || null;
+                const pageErrors = firstError.pageErrors || firstError.data?.pageErrors || null;
+                return {
+                  success: false,
+                  error: errorMsg,
+                  _debug: {
+                    state: action.state,
+                    fullError: JSON.stringify(errors, null, 2),
+                    fieldErrors,
+                    pageErrors,
+                    rawAction: JSON.stringify(action, null, 2).substring(0, 2000),
+                  }
+                };
+              }
+              
+              const recordId = action.returnValue?.id || action.returnValue?.recordId;
+              if (!recordId) return { success: false, error: 'No record ID returned', _debug: { returnValue: action.returnValue } };
+              
+              return {
+                success: true,
+                recordId,
+                recordUrl: `/lightning/r/Opportunity/${recordId}/view`,
+              };
+            }
+          }
+        }
+        return { success: false, error: 'Could not parse response' };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }, { credentials, fields: opportunityFields });
+    
+    if (!createOppResult.success) {
+      log.error('AURA', 'Failed to create Opportunity', {
+        error: createOppResult.error,
+        debug: createOppResult._debug,
+      });
+      result.error = `Failed to create Opportunity: ${createOppResult.error}`;
+      if (createOppResult._debug?.fieldErrors) {
+        result.error += ` | Field errors: ${JSON.stringify(createOppResult._debug.fieldErrors)}`;
+      }
+      await saveCookies(context);
+      await context.close();
+      return result;
+    }
+    
+    result.opportunityId = createOppResult.recordId;
+    result.opportunityUrl = `https://indall.lightning.force.com${createOppResult.recordUrl}`;
+    log.info('AURA', `Opportunity created: ${result.opportunityId}`);
+    
+    // ─── Step 2: Wait for Salesforce trigger to create Case ───
+    log.info('AURA', 'Waiting for Case creation trigger...');
+    await page.waitForTimeout(2000);
+    
+    // ─── Step 3: Get Case ID from Opportunity ───
+    log.info('AURA', 'Retrieving Case ID...');
+    
+    const getCaseResult = await page.evaluate(async ({ credentials, opportunityId }) => {
+      // IMPORTANT: Use getRecordWithFields (not getRecord) - see model/auth/salesforce_aura_v2.js line 407
+      const descriptor = 'aura://RecordUiController/ACTION$getRecordWithFields';
+      
+      const message = {
+        actions: [{
+          id: '1;a',
+          descriptor,
+          callingDescriptor: 'UNKNOWN',
+          params: {
+            recordId: opportunityId,
+            fields: ['Opportunity.Case__c', 'Opportunity.Case__r.Id'],
+          },
+        }],
+      };
+      
+      const body = new URLSearchParams();
+      body.append('message', JSON.stringify(message));
+      body.append('aura.context', JSON.stringify(credentials.context));
+      body.append('aura.token', credentials.token || 'undefined');
+      
+      // IMPORTANT: Use correct query params for getRecordWithFields
+      const qp = new URLSearchParams({ 'aura.RecordUi.getRecordWithFields': '1', r: '1' });
+      
+      try {
+        const response = await fetch('/aura?' + qp.toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+          body: body.toString(),
+          credentials: 'include',
+        });
+        
+        if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+        
+        const rawText = await response.text();
+        const firstBrace = rawText.indexOf('{');
+        if (firstBrace === -1) return { success: false, error: 'No JSON' };
+        
+        let depth = 0, inString = false, escape = false, start = -1;
+        for (let i = firstBrace; i < rawText.length; i++) {
+          const ch = rawText[i];
+          if (escape) { escape = false; continue; }
+          if (ch === '\\' && inString) { escape = true; continue; }
+          if (ch === '"') { inString = !inString; continue; }
+          if (inString) continue;
+          if (ch === '{') { if (depth === 0) start = i; depth++; }
+          else if (ch === '}') {
+            depth--;
+            if (depth === 0 && start !== -1) {
+              const jsonStr = rawText.substring(start, i + 1);
+              const data = JSON.parse(jsonStr);
+              
+              const actions = data.actions || [];
+              if (actions.length === 0) return { success: false, error: 'No actions' };
+              
+              const action = actions[0];
+              if (action.state !== 'SUCCESS') {
+                return { success: false, error: action.error?.message || 'Failed' };
+              }
+              
+              const record = action.returnValue?.record || action.returnValue;
+              const caseId = record?.fields?.Case__c?.value;
+              
+              if (!caseId) return { success: false, error: 'No Case__c field' };
+              
+              return { success: true, caseId };
+            }
+          }
+        }
+        return { success: false, error: 'Parse failed' };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }, { credentials, opportunityId: result.opportunityId });
+    
+    log.debug('AURA', 'getCaseResult:', getCaseResult);
+    
+    if (!getCaseResult.success) {
+      log.warn('AURA', 'First attempt to get Case ID failed, retrying in 3 seconds...', { error: getCaseResult.error });
+      
+      // Retry after more time - trigger may need longer
+      await page.waitForTimeout(3000);
+      
+      const retryResult = await page.evaluate(async ({ credentials, opportunityId }) => {
+        const descriptor = 'aura://RecordUiController/ACTION$getRecordWithFields';
+        const message = {
+          actions: [{
+            id: '1;a',
+            descriptor,
+            callingDescriptor: 'UNKNOWN',
+            params: { recordId: opportunityId, fields: ['Opportunity.Case__c', 'Opportunity.Case__r.Id'] },
+          }],
+        };
+        const body = new URLSearchParams();
+        body.append('message', JSON.stringify(message));
+        body.append('aura.context', JSON.stringify(credentials.context));
+        body.append('aura.token', credentials.token || 'undefined');
+        const qp = new URLSearchParams({ 'aura.RecordUi.getRecordWithFields': '1', r: '1' });
+        try {
+          const response = await fetch('/aura?' + qp.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString(),
+            credentials: 'include',
+          });
+          if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+          const rawText = await response.text();
+          const firstBrace = rawText.indexOf('{');
+          if (firstBrace === -1) return { success: false, error: 'No JSON', rawText: rawText.substring(0, 500) };
+          let depth = 0, inString = false, escape = false, start = -1;
+          for (let i = firstBrace; i < rawText.length; i++) {
+            const ch = rawText[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\' && inString) { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') { if (depth === 0) start = i; depth++; }
+            else if (ch === '}') {
+              depth--;
+              if (depth === 0 && start !== -1) {
+                const jsonStr = rawText.substring(start, i + 1);
+                const data = JSON.parse(jsonStr);
+                const actions = data.actions || [];
+                if (actions.length === 0) return { success: false, error: 'No actions' };
+                const action = actions[0];
+                if (action.state !== 'SUCCESS') {
+                  return { success: false, error: action.error?.message || 'Failed' };
+                }
+                const record = action.returnValue?.record || action.returnValue;
+                const caseId = record?.fields?.Case__c?.value;
+                if (!caseId) return { success: false, error: 'No Case__c field', _debug: { fields: Object.keys(record?.fields || {}) } };
+                return { success: true, caseId };
+              }
+            }
+          }
+          return { success: false, error: 'Parse failed' };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      }, { credentials, opportunityId: result.opportunityId });
+      
+      log.debug('AURA', 'Retry getCaseResult:', retryResult);
+      
+      if (!retryResult.success) {
+        result.success = true; // Opportunity was created
+        result.warning = `Opportunity created but could not retrieve Case: ${retryResult.error}`;
+        if (retryResult._debug) {
+          result.warning += ` | Available fields: ${JSON.stringify(retryResult._debug.fields)}`;
+        }
+        await saveCookies(context);
+        await context.close();
+        return result;
+      }
+      
+      result.caseId = retryResult.caseId;
+    } else {
+      result.caseId = getCaseResult.caseId;
+    }
+    
+    result.caseUrl = `https://indall.lightning.force.com/lightning/r/Case/${result.caseId}/view`;
+    log.info('AURA', `Case found: ${result.caseId}`);
+    
+    // ─── Step 4: Update Case with form data ───
+    if (caseData && Object.keys(caseData).length > 0) {
+      log.info('AURA', 'Updating Case...');
+      
+      // Check if subsidiary is iA (for conditional signature fields)
+      const isIaSubsidiary = opportunityData?.subsidiary === 'iA';
+      
+      // Build Case fields using correct API names from docs/Case.md
+      // Required fields: Product_Family__c, Transaction_Category__c, Transaction_Sub_Category__c
+      // Conditional (only if iA): SignatureType__c, CustomersPlaceOfResidence__c, ProductType__c
+      const caseFields = {
+        Id: result.caseId,
+        Subject: 'Nouveau contrat',
+        ...(caseData?.productFamily && { Product_Family__c: caseData.productFamily }),
+        ...(caseData?.transactionCategory && { Transaction_Category__c: caseData.transactionCategory }),
+        ...(caseData?.transactionSubCategory && { Transaction_Sub_Category__c: caseData.transactionSubCategory }),
+        // Conditional iA fields
+        ...(isIaSubsidiary && caseData?.signatureType && { SignatureType__c: caseData.signatureType }),
+        ...(isIaSubsidiary && caseData?.customersPlaceOfResidence && { CustomersPlaceOfResidence__c: caseData.customersPlaceOfResidence }),
+        ...(isIaSubsidiary && caseData?.productType && { ProductType__c: caseData.productType }),
+      };
+      
+      log.debug('AURA', 'Case fields to update:', {
+        caseId: result.caseId,
+        isIaSubsidiary,
+        fields: caseFields,
+      });
+      
+      const updateCaseResult = await page.evaluate(async ({ credentials, caseId, fields }) => {
+        const descriptor = 'aura://RecordUiController/ACTION$updateRecord';
+        
+        // Per docs/Case.md lines 337-353: recordId required at params level
+        const message = {
+          actions: [{
+            id: '1;a',
+            descriptor,
+            callingDescriptor: 'UNKNOWN',
+            params: {
+              recordId: caseId,
+              recordInput: {
+                allowSaveOnDuplicate: false,
+                fields: fields, // Direct values, not wrapped
+              },
+            },
+          }],
+        };
+        
+        const body = new URLSearchParams();
+        body.append('message', JSON.stringify(message));
+        body.append('aura.context', JSON.stringify(credentials.context));
+        body.append('aura.token', credentials.token || 'undefined');
+        
+        // Use correct query params for updateRecord
+        const qp = new URLSearchParams({
+          'aura.RecordUi.updateRecord': '1',
+          r: '1',
+        });
+        
+        try {
+          const response = await fetch('/aura?' + qp.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString(),
+            credentials: 'include',
+          });
+          
+          if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+          
+          const rawText = await response.text();
+          const firstBrace = rawText.indexOf('{');
+          if (firstBrace === -1) return { success: false, error: 'No JSON' };
+          
+          let depth = 0, inString = false, escape = false, start = -1;
+          for (let i = firstBrace; i < rawText.length; i++) {
+            const ch = rawText[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\' && inString) { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') { if (depth === 0) start = i; depth++; }
+            else if (ch === '}') {
+              depth--;
+              if (depth === 0 && start !== -1) {
+                const jsonStr = rawText.substring(start, i + 1);
+                const data = JSON.parse(jsonStr);
+                
+                const actions = data.actions || [];
+                if (actions.length === 0) return { success: false, error: 'No actions in response' };
+                
+                const action = actions[0];
+                if (action.state !== 'SUCCESS') {
+                  // Extract detailed error info
+                  const errorInfo = Array.isArray(action.error) ? action.error : [action.error];
+                  const errorMessage = errorInfo.map(e => e?.message || JSON.stringify(e)).join('; ');
+                  return {
+                    success: false,
+                    error: errorMessage || 'Update failed',
+                    _debug: {
+                      fieldErrors: action.error?.[0]?.fieldErrors,
+                      pageErrors: action.error?.[0]?.pageErrors,
+                      rawError: JSON.stringify(action.error),
+                    },
+                  };
+                }
+                
+                return { success: true };
+              }
+            }
+          }
+          return { success: false, error: 'Parse failed' };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      }, { credentials, caseId: result.caseId, fields: caseFields });
+      
+      if (!updateCaseResult.success) {
+        log.error('AURA', 'Failed to update Case', {
+          error: updateCaseResult.error,
+          debug: updateCaseResult._debug,
+        });
+        result.success = true; // Opportunity and Case exist
+        result.warning = `Case found but update failed: ${updateCaseResult.error}`;
+        if (updateCaseResult._debug?.fieldErrors) {
+          result.warning += ` | Field errors: ${JSON.stringify(updateCaseResult._debug.fieldErrors)}`;
+        }
+        await saveCookies(context);
+        await context.close();
+        return result;
+      }
+      
+      log.info('AURA', 'Case updated successfully', { caseId: result.caseId });
+    }
+    
+    result.success = true;
+    log.info('AURA', 'Dossier creation complete', {
+      opportunityId: result.opportunityId,
+      caseId: result.caseId,
+    });
+    
+    await saveCookies(context);
+    await context.close();
+    return result;
+    
+  } catch (e) {
+    log.error('AURA', 'Dossier creation error', e);
+    if (context) await context.close().catch(() => {});
+    
+    result.error = e.message;
+    return result;
+  }
+}
+
+/**
  * Capture Aura credentials from page requests.
  */
 async function captureAuraCredentials(page, timeout = 15000) {
@@ -1723,6 +2278,24 @@ ipcMain.handle('salesforce:searchAccount', async (event, params) => {
       found: false,
       error: 'UNKNOWN',
       message: e.message,
+    };
+  }
+});
+
+// Create dossier (Opportunity + Case update)
+ipcMain.handle('salesforce:createDossier', async (event, params) => {
+  try {
+    log.info('IPC', 'salesforce:createDossier called', {
+      accountId: params?.accountId,
+      hasOpportunityData: !!params?.opportunityData,
+      hasCaseData: !!params?.caseData,
+    });
+    return await createDossier(params);
+  } catch (e) {
+    log.error('IPC', 'salesforce:createDossier error', e);
+    return {
+      success: false,
+      error: e.message,
     };
   }
 });

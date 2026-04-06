@@ -50,6 +50,33 @@
 | `CustomersPlaceOfResidence__c` | "Quebec" |
 | `ProductType__c` | "Life Insurance" |
 
+> **Note**: SignatureType, CustomersPlaceOfResidence, ProductType only required if `Subsidiary__c = "iA"`
+
+### Case Update API Format (CRITICAL)
+```javascript
+params: {
+  recordId: caseId,  // ← REQUIRED at params level
+  recordInput: {
+    allowSaveOnDuplicate: false,
+    fields: {
+      Id: caseId,
+      Subject: "Nouveau contrat",
+      Product_Family__c: "Insurance",
+      // ... direct values, NOT wrapped in { value: X }
+    },
+  },
+}
+queryParams: { 'aura.RecordUi.updateRecord': '1', r: '1' }
+```
+
+### Get Record API Format (CRITICAL)
+Use `getRecordWithFields` (NOT `getRecord`):
+```javascript
+descriptor: 'aura://RecordUiController/ACTION$getRecordWithFields'
+params: { recordId, fields: ['Opportunity.Case__c', 'Opportunity.Case__r.Id'] }
+queryParams: { 'aura.RecordUi.getRecordWithFields': '1', r: '1' }
+```
+
 ### Account Fields
 
 - **Email**: `Primary_Email__c` + `Primary_Email_Type__c` (paired)
@@ -141,6 +168,8 @@ src/
 - [ ] Create `lib/upload_document.js` stable function for main.js integration
 - [ ] Create `lib/create_note.js` integration into main.js
 - [ ] Test refactored Electron structure (`main.refactored.js` → `main.js`)
+- [ ] Add note creation step to Dossiers workflow
+- [ ] Add document upload step to Dossiers workflow
 
 ---
 
@@ -151,3 +180,4 @@ src/
 - **Don't guess field names** — verify via SF Object Manager
 - **Don't run two scripts simultaneously** — browser_profile gets locked
 - **Don't use Escape/Tab on Flow modals** — Escape closes modal, Tab may trigger Next button
+- **IPC handlers in main.js, NOT modular** — `electron/ipc/` folder exists but main.js uses inline handlers. Add new IPC handlers directly in `main.js` after `salesforce:searchAccount`

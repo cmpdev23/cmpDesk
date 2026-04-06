@@ -1,6 +1,6 @@
 /**
  * Salesforce IPC Handlers
- * 
+ *
  * Handles Salesforce operations via IPC.
  */
 
@@ -29,6 +29,26 @@ function register() {
       return {
         success: false,
         message: error.message,
+      };
+    }
+  });
+
+  // Create dossier (Opportunity + Case)
+  ipcMain.handle('salesforce:createDossier', async (_, params) => {
+    log.info('IPC', 'salesforce:createDossier called', {
+      accountId: params?.accountId,
+      hasOpportunityData: !!params?.opportunityData,
+      hasCaseData: !!params?.caseData,
+    });
+    
+    try {
+      const result = await salesforceService.createDossier(params);
+      return result;
+    } catch (error) {
+      log.error('IPC', 'salesforce:createDossier error', error);
+      return {
+        success: false,
+        error: error.message,
       };
     }
   });
