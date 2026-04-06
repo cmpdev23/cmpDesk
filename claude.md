@@ -46,21 +46,6 @@
   - **SMART_SCOPE** must include Account with Phone field and ContactPointPhone entity
   - Response structure: `returnValue.answers[].data.results[].result[].record`
 
-## System improvements (TODO)
-
-- [x] Deprecate `salesforce_aura.js` → deleted (v1 dead code removed 2026-04-01)
-- [x] Deprecate `scripts/create_account_api.js` → deleted (used v1 AuraClient)
-- [x] Fix `scripts/seeds/account.js` — added import/export, added `Primary_Email__c`, `Primary_Email_Type__c`, `Phone` fields (2026-04-01)
-- [x] Fix `scripts/create_account_api_v2.js` — removed unused `ACCOUNT_RECORD_TYPE_ID` import (2026-04-01)
-- [x] Created `inspectors/inspect_account_fields.js` — runs `getObjectInfo(Account)` via Aura to dump all field metadata (2026-04-01)
-- [x] Created `scripts/main.js` — orchestrateur principal, Milestone 1 intégré (2026-04-02)
-- [ ] Run `inspect_account_fields.js` → confirm exact API names for phone type and email type fields → update seeds/account.js
-- [ ] Add re-capture logic when token expires (auto-retry on invalidSession)
-- [ ] Create `lib/salesforce.js` as single public API layer wrapping AuraClientV2
-- [ ] Document all required fields per RecordType in `docs/`
-- [x] Milestone 2: Créer le Case lié à l'Opportunity (lib/create_case.js) — **BLOCKED by validation rule**
-- [ ] Milestone 3: Déclencher le Flow `Opportunity_UpdateCaseInformation` via API
-
 ## Milestone — inspectors refactor (2026-04-01)
 
 - **inspectors/ reorganized** into two categories:
@@ -110,6 +95,7 @@
 Fields captured during creation (from `inspectors/reports/opportunity_creation_flow.json`):
 
 **Required fields:**
+
 - `AccountId` - Parent account ID
 - `CloseDate` - Close date (format: "YYYY-MM-DD")
 - `StageName` - Pipeline stage (e.g., "Closed Won")
@@ -117,6 +103,7 @@ Fields captured during creation (from `inspectors/reports/opportunity_creation_f
 - `OwnerId` - Owner user ID
 
 **Key custom fields:**
+
 - `Annual_Premium__c` - Number
 - `Contract_Number__c` - String
 - `Opportunity_Category__c` - Picklist (e.g., "Gobal Offer")
@@ -126,6 +113,7 @@ Fields captured during creation (from `inspectors/reports/opportunity_creation_f
 - `Probability` - Number (0-100)
 
 **Optional fields:**
+
 - `Amount`
 - `Description`
 - `LeadSource`
@@ -179,13 +167,13 @@ Fields captured during creation (from `inspectors/reports/opportunity_creation_f
 
 ### Form Field Types Discovered
 
-| Type | Selector | Count in Opportunity Form |
-|------|----------|---------------------------|
-| Picklist | `lightning-combobox` | 6 |
-| Input | `lightning-input` | 7 |
-| Textarea | `lightning-textarea` | 1 |
-| Lookup | `lightning-lookup` | 4 |
-| Datepicker | `lightning-datepicker` | 3 |
+| Type       | Selector               | Count in Opportunity Form |
+| ---------- | ---------------------- | ------------------------- |
+| Picklist   | `lightning-combobox`   | 6                         |
+| Input      | `lightning-input`      | 7                         |
+| Textarea   | `lightning-textarea`   | 1                         |
+| Lookup     | `lightning-lookup`     | 4                         |
+| Datepicker | `lightning-datepicker` | 3                         |
 
 ### Shadow DOM Traversal Pattern
 
@@ -195,8 +183,8 @@ const locator = page.locator(`css=lightning-combobox`);
 const count = await locator.count(); // Works!
 
 // page.evaluate() does NOT pierce shadow DOM
-const count = await page.evaluate(() =>
-  document.querySelectorAll("lightning-combobox").length
+const count = await page.evaluate(
+  () => document.querySelectorAll("lightning-combobox").length,
 ); // Returns 0 inside shadow DOM!
 ```
 
@@ -224,6 +212,7 @@ The popup form that appears after Opportunity creation is **NOT an Opportunity e
 It is a **Salesforce Screen Flow** that creates a **Case** record linked to the Opportunity.
 
 **Flow Details:**
+
 - **Flow API Name**: `Opportunity_UpdateCaseInformation`
 - **Descriptor**: `aura://FlowRuntimeConnectController/ACTION$startFlow`
 - **Arguments**: `[{"name":"recordId","type":"String","value":"<OpportunityId>"}]`
@@ -232,14 +221,14 @@ It is a **Salesforce Screen Flow** that creates a **Case** record linked to the 
 
 The fields previously thought to be "Step 2" and "Step 3" of Opportunity creation are actually **Case fields**:
 
-| Field (UI Label)              | Case Field API Name                | Type     |
-| ----------------------------- | ---------------------------------- | -------- |
-| Famille de produit            | `Product_Family__c`                | Picklist |
-| Catégorie de transaction      | `Transaction_Category__c`          | Picklist |
-| Sous-catégorie de transaction | `Transaction_Sub_Category__c`      | Picklist |
-| Type de signature             | `SignatureType__c`                 | Picklist |
-| Lieu de résidence             | `CustomersPlaceOfResidence__c`     | Picklist |
-| Type de produit               | `ProductType__c`                   | Picklist |
+| Field (UI Label)              | Case Field API Name            | Type     |
+| ----------------------------- | ------------------------------ | -------- |
+| Famille de produit            | `Product_Family__c`            | Picklist |
+| Catégorie de transaction      | `Transaction_Category__c`      | Picklist |
+| Sous-catégorie de transaction | `Transaction_Sub_Category__c`  | Picklist |
+| Type de signature             | `SignatureType__c`             | Picklist |
+| Lieu de résidence             | `CustomersPlaceOfResidence__c` | Picklist |
+| Type de produit               | `ProductType__c`               | Picklist |
 
 ### Case RecordTypeId
 
@@ -263,12 +252,14 @@ The Opportunity has a lookup field `Case__c` that references the Case record. Fo
 The Flow has multiple screens navigated via `navigateFlow` with action `NEXT`:
 
 **Screen 1 Fields (mapped from capture):**
+
 - `_7` = Transaction type label ("Nouveau Contrat")
 - `_8` = Product Family ("Insurance")
 - `_9` = Transaction Category ("New Contract")
 - `_10` = Transaction Sub Category ("Without Replacement")
 
 **Screen 2 Fields (mapped from capture):**
+
 - `ProductFamily.productFamilyPicklist.Insurance.selected` = boolean
 - `TransactionCategory.transactionCategoryPicklist.New Contract.selected` = boolean
 - `TransactionSubCategory.subCategoryPicklist.Without Replacement.selected` = boolean
@@ -338,16 +329,19 @@ Full capture data: `inspectors/reports/opportunity_popup_inspection.json`
 ### Revised Strategy
 
 **Option A - API UPDATE (Recommended):**
+
 1. Create Opportunity via API ✅
 2. Query the auto-created Case ID (via `Opportunity.Case__c` or SOQL)
 3. UPDATE the Case with required fields via `RecordUiController/ACTION$updateRecord`
 
 **Option B - Flow API:**
+
 1. Create Opportunity via API ✅
 2. Call `FlowRuntimeConnectController/startFlow` with `Opportunity_UpdateCaseInformation`
 3. Navigate Flow screens via `FlowRuntimeConnectController/navigateFlow`
 
 **Option C - Hybrid (Playwright):**
+
 1. Create Opportunity via API ✅
 2. Navigate to Opportunity (triggers Flow)
 3. Fill Flow forms via Playwright UI
@@ -368,7 +362,7 @@ The `updateRecord` API requires `recordId` at params level:
 await client.auraAction({
   descriptor: "aura://RecordUiController/ACTION$updateRecord",
   params: {
-    recordId: caseId,  // ← REQUIRED at params level
+    recordId: caseId, // ← REQUIRED at params level
     recordInput: {
       allowSaveOnDuplicate: false,
       fields: { Id: caseId, ...otherFields },
@@ -399,14 +393,14 @@ Result: SUCCESS ✅
 
 ### Case Required Fields (Updated)
 
-| Field | Value | Notes |
-|-------|-------|-------|
-| `Product_Family__c` | "Insurance" | Picklist |
-| `Transaction_Category__c` | "New Contract" | Picklist |
-| `Transaction_Sub_Category__c` | "Without Replacement" | Picklist |
-| `SignatureType__c` | "Electronic" | Picklist |
-| `CustomersPlaceOfResidence__c` | "Quebec" | Picklist |
-| `ProductType__c` | "Life Insurance" | **Required** - Validation rule |
+| Field                          | Value                 | Notes                          |
+| ------------------------------ | --------------------- | ------------------------------ |
+| `Product_Family__c`            | "Insurance"           | Picklist                       |
+| `Transaction_Category__c`      | "New Contract"        | Picklist                       |
+| `Transaction_Sub_Category__c`  | "Without Replacement" | Picklist                       |
+| `SignatureType__c`             | "Electronic"          | Picklist                       |
+| `CustomersPlaceOfResidence__c` | "Quebec"              | Picklist                       |
+| `ProductType__c`               | "Life Insurance"      | **Required** - Validation rule |
 
 ---
 
@@ -422,6 +416,7 @@ Creating a Note linked to a Case requires **two API calls**:
 ### API Details
 
 **Step 1: Create ContentNote**
+
 - **Descriptor**: `serviceComponent://ui.force.components.controllers.recordGlobalValueProvider.RecordGvpController/ACTION$saveRecord`
 - **Object API Name**: `ContentNote`
 - **Fields**:
@@ -433,6 +428,7 @@ Creating a Note linked to a Case requires **two API calls**:
   | `SharingPrivacy` | String | "N" for normal sharing |
 
 **Step 2: Link ContentNote to Case**
+
 - **Descriptor**: `serviceComponent://ui.notes.components.aura.components.editPanel.EditPanelController/ACTION$serverCreateUpdate`
 - **Parameters**:
   | Param | Type | Description |
@@ -448,6 +444,7 @@ Creating a Note linked to a Case requires **two API calls**:
 ### Example Payload Captured
 
 **Step 1 - Create ContentNote:**
+
 ```javascript
 {
   recordRep: {
@@ -467,6 +464,7 @@ Creating a Note linked to a Case requires **two API calls**:
 ```
 
 **Step 2 - Link to Case:**
+
 ```javascript
 {
   noteId: "069JQ00000s0UF8YAM",  // ContentNote ID
@@ -482,6 +480,7 @@ Creating a Note linked to a Case requires **two API calls**:
 ### Content Encoding
 
 Note content is HTML encoded in Base64:
+
 - `PHA+PC9wPg==` → `<p></p>` (empty paragraph)
 - `PHA+Q0VDSSBFU1QgVU5FIE5PVEUgVEVTVEUgPC9wPg==` → `<p>CECI EST UNE NOTE TESTE </p>`
 
@@ -509,23 +508,25 @@ The system uses **xECM (OpenText Extended ECM)** integrated via Canvas App.
 
 ### 🎯 OpenText Server IDENTIFIED (2026-04-02)
 
-| Component | URL / Value |
-|-----------|-------------|
-| **OpenText Content Server** | `https://otcs.ia.ca/cs/cs/` |
-| **Canvas App Endpoint** | `https://otcs.ia.ca/cs/cs/xecmsf/canvas` |
-| **Node API** | `https://otcs.ia.ca/cs/cs/app/nodes/{nodeId}` |
-| **OTDS SSO** | `https://otds.ia.ca/` |
-| **Workspace Node (Case)** | `147266903` |
-| **Auth Token Format** | `*OTDSSSO*{base64_encoded_token}` |
+| Component                   | URL / Value                                   |
+| --------------------------- | --------------------------------------------- |
+| **OpenText Content Server** | `https://otcs.ia.ca/cs/cs/`                   |
+| **Canvas App Endpoint**     | `https://otcs.ia.ca/cs/cs/xecmsf/canvas`      |
+| **Node API**                | `https://otcs.ia.ca/cs/cs/app/nodes/{nodeId}` |
+| **OTDS SSO**                | `https://otds.ia.ca/`                         |
+| **Workspace Node (Case)**   | `147266903`                                   |
+| **Auth Token Format**       | `*OTDSSSO*{base64_encoded_token}`             |
 
 ### Problem: iframe Authentication Blocked
 
 When opening document management in a Case:
+
 ```
 login.microsoftonline.com n'autorise pas la connexion.
 ```
 
 **Cause:**
+
 - xECM Canvas App runs in an **iframe**
 - iframe tries to load Microsoft login page
 - Microsoft blocks logins in iframes via `X-Frame-Options: DENY`
@@ -560,12 +561,12 @@ serviceComponent://ui.force.components.controllers.canvasApp.CanvasAppController
 
 ### Investigation Options
 
-| Option | Approach | Complexity | Status |
-|--------|----------|------------|--------|
-| 1 | Direct xECM REST API | Medium | ✅ Server URL found |
-| 2 | Salesforce Connect / External Objects | Low if exists | ❓ To check |
-| 3 | Microsoft Graph API | High | ❌ Not needed |
-| 4 | Capture OTDS token via SF API | Low | ✅ Token format known |
+| Option | Approach                              | Complexity    | Status                |
+| ------ | ------------------------------------- | ------------- | --------------------- |
+| 1      | Direct xECM REST API                  | Medium        | ✅ Server URL found   |
+| 2      | Salesforce Connect / External Objects | Low if exists | ❓ To check           |
+| 3      | Microsoft Graph API                   | High          | ❌ Not needed         |
+| 4      | Capture OTDS token via SF API         | Low           | ✅ Token format known |
 
 ### Files Created
 
@@ -579,8 +580,8 @@ serviceComponent://ui.force.components.controllers.canvasApp.CanvasAppController
 
 **3 documents uploaded successfully to OpenText Content Server!**
 
-| Document | Node ID | Size |
-|----------|---------|------|
+| Document       | Node ID   | Size         |
+| -------------- | --------- | ------------ |
 | DOCUMENT_1.pdf | 147292342 | 12,618 bytes |
 | DOCUMENT_2.pdf | 147329598 | 12,238 bytes |
 | DOCUMENT_3.pdf | 147343832 | 12,638 bytes |
@@ -615,6 +616,7 @@ Body:
 ### Problem
 
 When SF session cookies are expired, `main.js` would fail immediately with:
+
 ```
 ❌ Bootstrap échoué: Session SF non authentifiée
 ```
@@ -659,6 +661,7 @@ Modified `bootstrapAuraClient()` in `scripts/main.js` to:
 ### Key Design Decision
 
 **Don't use `handleSsoRedirect()` with its internal timeout** — the MFA flow (Microsoft Authenticator) can take a long time. Instead:
+
 1. Click SSO button once (if on SSO page)
 2. Let the main 180s timeout handle the wait
 3. Check `isOnLightning()` every 3s until success or timeout
@@ -670,6 +673,7 @@ Modified `bootstrapAuraClient()` in `scripts/main.js` to:
 ### Problem
 
 When running `main.js`, the `createNote` milestone fails with:
+
 ```
 ❌ createNote                     Impossible d'extraire le UserId du context SF
 ```
@@ -679,6 +683,7 @@ Yet the same logic worked in `scripts/create_note_for_case.js`.
 ### Root Cause
 
 The original `getUserId()` function only used 3 methods that rely on Aura GVP (Global Value Provider) being fully loaded:
+
 1. `$A.get("$SObjectType.CurrentUser.Id")`
 2. `window.$User.id`
 3. `$A.getContext().getGlobal("$User")`
@@ -711,6 +716,7 @@ Method 2 (`UserContext.userId`) is the most reliable fallback because Lightning 
 ### Problem
 
 `milestone_createNote` in `main.js` fails with:
+
 ```
 ❌ createNote                     Impossible d'extraire le UserId du context SF
 ```
@@ -722,6 +728,7 @@ Yet the same logic works in `scripts/create_note_for_case.js`.
 The 6 extraction methods in `getUserId()` all depend on Lightning context being **fully loaded**.
 
 **Key difference:**
+
 - `scripts/create_note_for_case.js` → Navigates to Case page + waits 5s before calling `getUserId()`
 - `scripts/main.js` → Called `getUserId()` immediately without waiting for Lightning context
 
@@ -733,9 +740,9 @@ Added explicit navigation + wait in `milestone_createNote()`:
 
 ```javascript
 // Step 0: Navigate to Case page and wait for Lightning context
-const caseUrl = `${SF_HOME_URL.replace('/page/home', '')}/r/Case/${caseId}/view`;
+const caseUrl = `${SF_HOME_URL.replace("/page/home", "")}/r/Case/${caseId}/view`;
 await page.goto(caseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
-await page.waitForTimeout(5_000);  // ← Critical: wait for Lightning globals
+await page.waitForTimeout(5_000); // ← Critical: wait for Lightning globals
 ```
 
 ### Rule Added
@@ -756,14 +763,14 @@ Initialized the cmpDesk Electron desktop application with a complete UI foundati
 
 ### Stack Implemented
 
-| Component | Technology | Status |
-|-----------|------------|--------|
-| Desktop Runtime | Electron 33 | ✅ |
-| Frontend | React 18 + Vite 5 | ✅ |
-| Styling | Tailwind CSS 3.4 | ✅ |
-| UI Components | shadcn/ui (prepared) | ✅ |
-| Routing | React Router 6 | ✅ |
-| Database | SQLite (folder prepared) | 🔜 |
+| Component       | Technology               | Status |
+| --------------- | ------------------------ | ------ |
+| Desktop Runtime | Electron 33              | ✅     |
+| Frontend        | React 18 + Vite 5        | ✅     |
+| Styling         | Tailwind CSS 3.4         | ✅     |
+| UI Components   | shadcn/ui (prepared)     | ✅     |
+| Routing         | React Router 6           | ✅     |
+| Database        | SQLite (folder prepared) | 🔜     |
 
 ### Project Structure
 
@@ -876,27 +883,27 @@ src/lib/auth/
 
 ```typescript
 // Option 1: SessionManager class (recommended)
-import { SessionManager } from '@/lib/auth';
+import { SessionManager } from "@/lib/auth";
 
 const session = new SessionManager();
 try {
-    await session.open();
-    await session.goto("https://example.com");
-    console.log(await session.title());
+  await session.open();
+  await session.goto("https://example.com");
+  console.log(await session.title());
 } finally {
-    await session.close();
+  await session.close();
 }
 
 // Option 2: withSession helper
-import { withSession } from '@/lib/auth';
+import { withSession } from "@/lib/auth";
 
 const title = await withSession(async (session) => {
-    await session.goto("https://example.com");
-    return session.title();
+  await session.goto("https://example.com");
+  return session.title();
 });
 
 // Option 3: Quick status check (no browser)
-import { quickSessionCheck, getAuthPaths } from '@/lib/auth';
+import { quickSessionCheck, getAuthPaths } from "@/lib/auth";
 
 const status = quickSessionCheck();
 console.log(status.isValid, status.cookieCount);
@@ -907,26 +914,27 @@ console.log(paths.browserProfile);
 
 ### Auth Targets Configured
 
-| Target | Cookie Names | Home URL |
-|--------|--------------|----------|
-| INALCO (default) | `.ASPXAUTH`, `ee-authenticated` | `https://iaa.secureweb.inalco.com/MKMWPN23/home` |
-| Salesforce | `sid`, `sfdc_lv2`, `oid` | `https://indall.lightning.force.com/lightning/page/home` |
+| Target           | Cookie Names                    | Home URL                                                 |
+| ---------------- | ------------------------------- | -------------------------------------------------------- |
+| INALCO (default) | `.ASPXAUTH`, `ee-authenticated` | `https://iaa.secureweb.inalco.com/MKMWPN23/home`         |
+| Salesforce       | `sid`, `sfdc_lv2`, `oid`        | `https://indall.lightning.force.com/lightning/page/home` |
 
 ### Error Handling
 
 Custom error classes with codes:
+
 - `AuthenticationError`: `SESSION_EXPIRED`, `AUTH_TIMEOUT`, `HEADLESS_AUTH_REQUIRED`, `BROWSER_PROFILE_LOCKED`
 - `SessionError`: `NOT_OPENED`, `ALREADY_OPENED`, `CONTEXT_CLOSED`
 
 ### Migration from model/auth
 
-| Old (model/auth) | New (src/lib/auth) | Notes |
-|------------------|-------------------|-------|
-| `session_manager.js` | `session-manager.ts` | TypeScript, cleaner API |
-| `browser_context.js` | `browser-context.ts` | TypeScript, better error handling |
-| `salesforce_session.js` | `types.ts` (AUTH_TARGETS) | Merged into types |
-| `salesforce_sso.js` | Not migrated yet | Will be separate module |
-| Hardcoded paths | `storage.ts` | Electron-aware paths |
+| Old (model/auth)        | New (src/lib/auth)        | Notes                             |
+| ----------------------- | ------------------------- | --------------------------------- |
+| `session_manager.js`    | `session-manager.ts`      | TypeScript, cleaner API           |
+| `browser_context.js`    | `browser-context.ts`      | TypeScript, better error handling |
+| `salesforce_session.js` | `types.ts` (AUTH_TARGETS) | Merged into types                 |
+| `salesforce_sso.js`     | Not migrated yet          | Will be separate module           |
+| Hardcoded paths         | `storage.ts`              | Electron-aware paths              |
 
 ### Rules
 
@@ -976,14 +984,14 @@ Implemented complete login system with UI in the cmpDesk desktop application.
 
 ### Files Created/Modified
 
-| File | Type | Description |
-|------|------|-------------|
-| `electron/main.js` | Modified | Added IPC handlers for auth operations |
-| `electron/preload.js` | Modified | Exposed auth API to renderer |
-| `src/types/electron.d.ts` | Created | TypeScript types for Electron API |
-| `src/vite-env.d.ts` | Modified | Updated Window interface |
-| `src/components/sidebar/AuthStatus.tsx` | Created | Auth status UI component |
-| `src/layout/AppLayout.tsx` | Modified | Integrated AuthStatus in sidebar |
+| File                                    | Type     | Description                            |
+| --------------------------------------- | -------- | -------------------------------------- |
+| `electron/main.js`                      | Modified | Added IPC handlers for auth operations |
+| `electron/preload.js`                   | Modified | Exposed auth API to renderer           |
+| `src/types/electron.d.ts`               | Created  | TypeScript types for Electron API      |
+| `src/vite-env.d.ts`                     | Modified | Updated Window interface               |
+| `src/components/sidebar/AuthStatus.tsx` | Created  | Auth status UI component               |
+| `src/layout/AppLayout.tsx`              | Modified | Integrated AuthStatus in sidebar       |
 
 ### Auth Flow
 
@@ -1011,29 +1019,31 @@ We explicitly save all cookies to cookies.json with a 24-hour artificial expirat
 
 ### UI States
 
-| State | Indicator | Button | Description |
-|-------|-----------|--------|-------------|
-| `checking` | 🟡 pulse | None | Initial status check |
-| `connected` | 🟢 | None | Session valid |
-| `disconnected` | 🔴 | "Se connecter" | No session |
-| `expired` | 🟡 | "Reconnecter" | Session > 12h old |
-| `logging-in` | 🟡 pulse | Disabled | Browser open, waiting for auth |
+| State          | Indicator | Button         | Description                    |
+| -------------- | --------- | -------------- | ------------------------------ |
+| `checking`     | 🟡 pulse  | None           | Initial status check           |
+| `connected`    | 🟢        | None           | Session valid                  |
+| `disconnected` | 🔴        | "Se connecter" | No session                     |
+| `expired`      | 🟡        | "Reconnecter"  | Session > 12h old              |
+| `logging-in`   | 🟡 pulse  | Disabled       | Browser open, waiting for auth |
 
 ### IPC Channels
 
-| Channel | Direction | Parameters | Returns |
-|---------|-----------|------------|---------|
-| `auth:getStatus` | Renderer→Main | None | `AuthStatus` |
-| `auth:login` | Renderer→Main | `forceAuth?: boolean` | `LoginResult` |
-| `auth:ensureSession` | Renderer→Main | None | `EnsureSessionResult` |
+| Channel              | Direction     | Parameters            | Returns               |
+| -------------------- | ------------- | --------------------- | --------------------- |
+| `auth:getStatus`     | Renderer→Main | None                  | `AuthStatus`          |
+| `auth:login`         | Renderer→Main | `forceAuth?: boolean` | `LoginResult`         |
+| `auth:ensureSession` | Renderer→Main | None                  | `EnsureSessionResult` |
 
 ### Detection Strategy (Simple for now)
 
 Currently detects login via presence of auth cookies:
+
 - `.ASPXAUTH` (INALCO session)
 - `ee-authenticated` (INALCO flag)
 
 **TODO**: Enhance detection with:
+
 - API endpoint validation
 - Dashboard URL detection
 - Session token validation
@@ -1051,7 +1061,7 @@ Currently detects login via presence of auth cookies:
 // In any automation script
 const status = await window.electronAPI.auth.getStatus();
 if (!status.isConnected) {
-    await window.electronAPI.auth.login();
+  await window.electronAPI.auth.login();
 }
 // Now proceed with automation...
 ```
@@ -1073,11 +1083,11 @@ Implemented a centralized, environment-aware logging system for cmpDesk.
 
 ### Files Created
 
-| File | Description |
-|------|-------------|
-| `.env.example` | Environment configuration template |
-| `src/lib/logger.ts` | Central logging module (renderer process) |
-| `electron/main.js` | Updated with structured logging (main process) |
+| File                | Description                                    |
+| ------------------- | ---------------------------------------------- |
+| `.env.example`      | Environment configuration template             |
+| `src/lib/logger.ts` | Central logging module (renderer process)      |
+| `electron/main.js`  | Updated with structured logging (main process) |
 
 ### Environment Variables
 
@@ -1092,12 +1102,12 @@ LOG_LEVEL=debug       # debug, info, warn, error
 
 ### Log Levels
 
-| Level | Priority | DEV | PROD |
-|-------|----------|-----|------|
-| debug | 0 | ✅ (if DEBUG_LOGS=true) | ❌ |
-| info | 1 | ✅ | ❌ |
-| warn | 2 | ✅ | ✅ |
-| error | 3 | ✅ | ✅ |
+| Level | Priority | DEV                     | PROD |
+| ----- | -------- | ----------------------- | ---- |
+| debug | 0        | ✅ (if DEBUG_LOGS=true) | ❌   |
+| info  | 1        | ✅                      | ❌   |
+| warn  | 2        | ✅                      | ✅   |
+| error | 3        | ✅                      | ✅   |
 
 ### Scopes (Standardized)
 
@@ -1116,18 +1126,24 @@ LOG_LEVEL=debug       # debug, info, warn, error
 ### Usage (Renderer Process)
 
 ```typescript
-import { logDebug, logInfo, logWarn, logError, createScopedLogger } from '@/lib/logger';
+import {
+  logDebug,
+  logInfo,
+  logWarn,
+  logError,
+  createScopedLogger,
+} from "@/lib/logger";
 
 // Direct usage
-logDebug('AUTH', 'Session created', { userId: '123' });
-logInfo('API', 'Request sent', { endpoint: '/dossier' });
-logWarn('SESSION', 'Session expiring soon');
-logError('PLAYWRIGHT', 'Navigation failed', error);
+logDebug("AUTH", "Session created", { userId: "123" });
+logInfo("API", "Request sent", { endpoint: "/dossier" });
+logWarn("SESSION", "Session expiring soon");
+logError("PLAYWRIGHT", "Navigation failed", error);
 
 // Scoped logger (for modules)
-const log = createScopedLogger('AUTH');
-log.info('Login successful');
-log.error('Login failed', error);
+const log = createScopedLogger("AUTH");
+log.info("Login successful");
+log.error("Login failed", error);
 ```
 
 ### Usage (Main Process)
@@ -1135,10 +1151,10 @@ log.error('Login failed', error);
 The main process has its own logger implementation in `electron/main.js`:
 
 ```javascript
-log.debug('AUTH', 'Created browser profile', { path });
-log.info('SYSTEM', 'Window created', { env, devTools });
-log.warn('IPC', 'Slow response detected');
-log.error('AUTH', 'Authentication timeout', error);
+log.debug("AUTH", "Created browser profile", { path });
+log.info("SYSTEM", "Window created", { env, devTools });
+log.warn("IPC", "Slow response detected");
+log.error("AUTH", "Authentication timeout", error);
 ```
 
 ### Output Format
@@ -1155,6 +1171,7 @@ HH:MM:SS.mmm [LEVEL] [SCOPE] Message
 The logger automatically masks:
 
 **Field names** (case-insensitive):
+
 - `token`, `accessToken`, `refreshToken`
 - `password`, `secret`, `apiKey`
 - `cookie`, `cookies`, `authorization`
@@ -1163,6 +1180,7 @@ The logger automatically masks:
 - `.ASPXAUTH`, `OTDSTicket`
 
 **Patterns** (in values):
+
 - JWT tokens (`eyJ...`)
 - OTDS tokens (`*OTDSSSO*...`)
 - Basic auth headers
@@ -1173,14 +1191,17 @@ The logger automatically masks:
 The logger stores entries in memory for future Debug Panel UI:
 
 ```typescript
-import { getLogBuffer, filterLogs, clearLogBuffer } from '@/lib/logger';
+import { getLogBuffer, filterLogs, clearLogBuffer } from "@/lib/logger";
 
 // Get all logs
 const logs = getLogBuffer();
 
 // Filter logs
-const errors = filterLogs({ level: 'error', limit: 50 });
-const authLogs = filterLogs({ scope: 'AUTH', since: new Date(Date.now() - 3600000) });
+const errors = filterLogs({ level: "error", limit: 50 });
+const authLogs = filterLogs({
+  scope: "AUTH",
+  since: new Date(Date.now() - 3600000),
+});
 
 // Clear buffer
 clearLogBuffer();
@@ -1209,22 +1230,22 @@ if (ENV_CONFIG.SHOW_DEVTOOLS) {
 
 ```typescript
 // ❌ BAD: Direct console.log
-console.log('[auth] Session created');
+console.log("[auth] Session created");
 
 // ✅ GOOD: Logger with scope
-logInfo('AUTH', 'Session created');
+logInfo("AUTH", "Session created");
 
 // ❌ BAD: String concatenation
-logInfo('AUTH', 'User ' + userId + ' logged in');
+logInfo("AUTH", "User " + userId + " logged in");
 
 // ✅ GOOD: Structured data
-logInfo('AUTH', 'User logged in', { userId });
+logInfo("AUTH", "User logged in", { userId });
 
 // ❌ BAD: Logging sensitive data
-logDebug('AUTH', 'Token received', { token: actualToken });
+logDebug("AUTH", "Token received", { token: actualToken });
 
 // ✅ GOOD: Logger masks automatically, but avoid passing raw tokens
-logDebug('AUTH', 'Token received', { tokenLength: token.length });
+logDebug("AUTH", "Token received", { tokenLength: token.length });
 ```
 
 ### Next Steps
@@ -1316,6 +1337,7 @@ The search checks if a client account already exists before creating a new one.
 ### Search Strategy
 
 Search order (returns on first match):
+
 1. **Phone** — Most precise, 10-digit number
 2. **Email** — Secondary match
 3. **Name** — Fallback (firstName + lastName)
@@ -1358,52 +1380,53 @@ Search order (returns on first match):
 
 ### Files Created/Modified
 
-| File | Action | Description |
-|------|--------|-------------|
-| `electron/main.js` | Modified | Added `searchAccount()`, `captureAuraCredentials()`, `searchByTerm()` functions + IPC handler |
-| `electron/preload.js` | Modified | Added `salesforceAPI.searchAccount()` |
-| `src/types/electron.d.ts` | Modified | Added `AccountSearchParams`, `AccountSearchResult`, `SalesforceAPI` types |
-| `src/lib/salesforce/types.ts` | Created | TypeScript types for Salesforce operations |
-| `src/lib/salesforce/index.ts` | Created | Barrel export for Salesforce module |
-| `src/modules/dossiers/types/index.ts` | Modified | Added `AccountSearchState` type |
-| `src/modules/dossiers/index.ts` | Modified | Export `AccountSearchState` |
-| `src/modules/dossiers/components/OpportunityFormStepCompte.tsx` | Modified | Added search button + result indicators |
-| `src/pages/Dossiers.tsx` | Modified | Added `accountSearchState` + `handleAccountFound()` |
+| File                                                            | Action   | Description                                                                                   |
+| --------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `electron/main.js`                                              | Modified | Added `searchAccount()`, `captureAuraCredentials()`, `searchByTerm()` functions + IPC handler |
+| `electron/preload.js`                                           | Modified | Added `salesforceAPI.searchAccount()`                                                         |
+| `src/types/electron.d.ts`                                       | Modified | Added `AccountSearchParams`, `AccountSearchResult`, `SalesforceAPI` types                     |
+| `src/lib/salesforce/types.ts`                                   | Created  | TypeScript types for Salesforce operations                                                    |
+| `src/lib/salesforce/index.ts`                                   | Created  | Barrel export for Salesforce module                                                           |
+| `src/modules/dossiers/types/index.ts`                           | Modified | Added `AccountSearchState` type                                                               |
+| `src/modules/dossiers/index.ts`                                 | Modified | Export `AccountSearchState`                                                                   |
+| `src/modules/dossiers/components/OpportunityFormStepCompte.tsx` | Modified | Added search button + result indicators                                                       |
+| `src/pages/Dossiers.tsx`                                        | Modified | Added `accountSearchState` + `handleAccountFound()`                                           |
 
 ### API Used
 
 **Aura Search Descriptor:**
+
 ```
 serviceComponent://ui.search.components.forcesearch.assistant.AssistantSuggestionsDataProviderController/ACTION$getSuggestions
 ```
 
 ### UI States
 
-| State | Indicator | Description |
-|-------|-----------|-------------|
-| `idle` | Helper text | Initial state, shows instructions |
-| `searching` | ⏳ spinner | Search in progress |
-| `found` | ✅ green badge | Account found, shows name + match method |
-| `not-found` | ℹ️ amber badge | No account, will create new |
-| `error` | ❌ red badge | Search failed, shows error message |
+| State       | Indicator      | Description                              |
+| ----------- | -------------- | ---------------------------------------- |
+| `idle`      | Helper text    | Initial state, shows instructions        |
+| `searching` | ⏳ spinner     | Search in progress                       |
+| `found`     | ✅ green badge | Account found, shows name + match method |
+| `not-found` | ℹ️ amber badge | No account, will create new              |
+| `error`     | ❌ red badge   | Search failed, shows error message       |
 
 ### Usage
 
 ```typescript
 // From renderer process
 const result = await window.electronAPI.salesforce.searchAccount({
-  phone: '5141234567',
-  email: 'client@example.com',
-  firstName: 'Jean',
-  lastName: 'Dupont',
+  phone: "5141234567",
+  email: "client@example.com",
+  firstName: "Jean",
+  lastName: "Dupont",
 });
 
 if (result.found) {
-  console.log('Account ID:', result.accountId);
-  console.log('Account Name:', result.accountName);
-  console.log('Matched by:', result.matchedBy); // 'phone' | 'email' | 'name'
+  console.log("Account ID:", result.accountId);
+  console.log("Account Name:", result.accountName);
+  console.log("Matched by:", result.matchedBy); // 'phone' | 'email' | 'name'
 } else {
-  console.log('No account found, will create new');
+  console.log("No account found, will create new");
 }
 ```
 
@@ -1420,6 +1443,7 @@ if (result.found) {
 ### Problem
 
 When user's Salesforce session was expired, the Account search would:
+
 1. Open browser
 2. Navigate to Salesforce
 3. Detect "Aura not available" (because redirected to login page)
@@ -1441,6 +1465,7 @@ Implemented a **wait-for-authentication pattern** in `searchAccount()`:
 ### Implementation
 
 New function `waitForAuraAuthentication(page, maxWaitMs)`:
+
 - Polls every 2 seconds (configurable via `AUTH_WAIT_CONFIG.pollIntervalMs`)
 - Timeout after 3 minutes (configurable via `AUTH_WAIT_CONFIG.maxWaitTimeMs`)
 - Detects login page URLs and continues waiting
@@ -1453,11 +1478,13 @@ New function `waitForAuraAuthentication(page, maxWaitMs)`:
 ### User Experience
 
 **Before:**
+
 ```
 Click "Rechercher" → Browser opens → Error "Session required" → Browser closes
 ```
 
 **After:**
+
 ```
 Click "Rechercher" → Browser opens → Login page shown → User logs in → Search continues automatically
 ```
@@ -1466,17 +1493,17 @@ Click "Rechercher" → Browser opens → Login page shown → User logs in → S
 
 ```javascript
 const AUTH_WAIT_CONFIG = {
-  pollIntervalMs: 2000,      // Check every 2 seconds
-  maxWaitTimeMs: 180000,     // Max 3 minutes to login
+  pollIntervalMs: 2000, // Check every 2 seconds
+  maxWaitTimeMs: 180000, // Max 3 minutes to login
 };
 ```
 
 ### Error Messages
 
-| Scenario | Error Code | French Message |
-|----------|------------|----------------|
-| User didn't login in time | `AUTH_TIMEOUT` | "Délai d'authentification dépassé. Veuillez réessayer." |
-| Aura still broken after auth | `AURA_NOT_AVAILABLE` | "Erreur Salesforce: framework Aura non disponible." |
+| Scenario                     | Error Code           | French Message                                          |
+| ---------------------------- | -------------------- | ------------------------------------------------------- |
+| User didn't login in time    | `AUTH_TIMEOUT`       | "Délai d'authentification dépassé. Veuillez réessayer." |
+| Aura still broken after auth | `AURA_NOT_AVAILABLE` | "Erreur Salesforce: framework Aura non disponible."     |
 
 ---
 
@@ -1522,18 +1549,18 @@ electron/
 
 ### Module Responsibilities
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `config/env.js` | ~90 | Centralized environment variables |
-| `lib/logger.js` | ~170 | Logging with level filtering and UI buffer |
-| `lib/window.js` | ~150 | Window creation, menu, theme |
-| `services/auth/browser.js` | ~160 | Playwright context management |
-| `services/auth/index.js` | ~180 | Auth orchestration |
-| `services/salesforce/aura-client.js` | ~170 | Aura API calls |
-| `services/salesforce/search.js` | ~280 | Search strategies |
-| `services/salesforce/index.js` | ~150 | Salesforce facade |
-| `ipc/*.js` | ~200 | IPC handlers (split by domain) |
-| `main.js` | ~100 | App lifecycle only |
+| Module                               | Lines | Purpose                                    |
+| ------------------------------------ | ----- | ------------------------------------------ |
+| `config/env.js`                      | ~90   | Centralized environment variables          |
+| `lib/logger.js`                      | ~170  | Logging with level filtering and UI buffer |
+| `lib/window.js`                      | ~150  | Window creation, menu, theme               |
+| `services/auth/browser.js`           | ~160  | Playwright context management              |
+| `services/auth/index.js`             | ~180  | Auth orchestration                         |
+| `services/salesforce/aura-client.js` | ~170  | Aura API calls                             |
+| `services/salesforce/search.js`      | ~280  | Search strategies                          |
+| `services/salesforce/index.js`       | ~150  | Salesforce facade                          |
+| `ipc/*.js`                           | ~200  | IPC handlers (split by domain)             |
+| `main.js`                            | ~100  | App lifecycle only                         |
 
 ### Benefits
 
@@ -1546,6 +1573,7 @@ electron/
 ### Adding New Features
 
 To add Opportunity creation:
+
 1. Create `services/salesforce/opportunity.js`
 2. Add functions to `services/salesforce/index.js`
 3. Create `ipc/opportunity.js` (or extend `ipc/salesforce.js`)
@@ -1586,4 +1614,3 @@ electron/main.refactored.js
 - **Config in one place**: All env vars in `config/env.js`
 - **IPC by domain**: Split IPC handlers by functional area
 - **Lazy loading**: Services load dependencies only when needed
-
