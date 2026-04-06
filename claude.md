@@ -1406,3 +1406,68 @@ if (result.found) {
 - [ ] Add "Créer un nouveau compte" explicit option when account is found
 - [ ] Cache search results to avoid repeated API calls
 
+---
+
+## Bugfix — Account Search Wait for Auth (2026-04-06)
+
+### Problem
+
+When user's Salesforce session was expired, the Account search would:
+1. Open browser
+2. Navigate to Salesforce
+3. Detect "Aura not available" (because redirected to login page)
+4. Immediately return error: `SESSION_REQUIRED: Salesforce session required. Please login first.`
+5. Close browser
+
+User had no opportunity to authenticate.
+
+### Solution
+
+Implemented a **wait-for-authentication pattern** in `searchAccount()`:
+
+1. **Detect auth required** — Check if Aura framework is unavailable after navigation
+2. **Wait for user login** — Keep browser open and poll every 2 seconds
+3. **Detect login page URLs** — `login.salesforce.com`, `/login`, `identity.salesforce.com`
+4. **Detect successful auth** — Aura `$A` becomes available
+5. **Continue operation** — Re-navigate and proceed with search
+
+### Implementation
+
+New function `waitForAuraAuthentication(page, maxWaitMs)`:
+- Polls every 2 seconds (configurable via `AUTH_WAIT_CONFIG.pollIntervalMs`)
+- Timeout after 3 minutes (configurable via `AUTH_WAIT_CONFIG.maxWaitTimeMs`)
+- Detects login page URLs and continues waiting
+- Returns `true` when Aura becomes available, `false` on timeout
+
+### Files Modified
+
+- `electron/main.js` — Added `waitForAuraAuthentication()` function, modified `searchAccount()` flow
+
+### User Experience
+
+**Before:**
+```
+Click "Rechercher" → Browser opens → Error "Session required" → Browser closes
+```
+
+**After:**
+```
+Click "Rechercher" → Browser opens → Login page shown → User logs in → Search continues automatically
+```
+
+### Configuration
+
+```javascript
+const AUTH_WAIT_CONFIG = {
+  pollIntervalMs: 2000,      // Check every 2 seconds
+  maxWaitTimeMs: 180000,     // Max 3 minutes to login
+};
+```
+
+### Error Messages
+
+| Scenario | Error Code | French Message |
+|----------|------------|----------------|
+| User didn't login in time | `AUTH_TIMEOUT` | "Délai d'authentification dépassé. Veuillez réessayer." |
+| Aura still broken after auth | `AURA_NOT_AVAILABLE` | "Erreur Salesforce: framework Aura non disponible." |
+

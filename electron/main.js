@@ -444,9 +444,62 @@ async function getAuthModule() {
 // SALESFORCE MODULE - Account Search via Aura API
 // ============================================================================
 
+// Configuration for authentication wait
+const AUTH_WAIT_CONFIG = {
+  pollIntervalMs: 2000,      // Check every 2 seconds
+  maxWaitTimeMs: 180000,     // Max 3 minutes to login
+};
+
+/**
+ * Wait for Salesforce Aura framework to become available (user authenticated).
+ * Polls the page until $A is defined or timeout is reached.
+ *
+ * @param {Page} page - Playwright page instance
+ * @param {number} maxWaitMs - Maximum time to wait in milliseconds
+ * @returns {Promise<boolean>} - True if Aura became available, false if timeout
+ */
+async function waitForAuraAuthentication(page, maxWaitMs = AUTH_WAIT_CONFIG.maxWaitTimeMs) {
+  const startTime = Date.now();
+  const pollInterval = AUTH_WAIT_CONFIG.pollIntervalMs;
+  
+  log.info('AURA', `Waiting for user to authenticate (timeout: ${maxWaitMs / 1000}s)...`);
+  
+  while (Date.now() - startTime < maxWaitMs) {
+    // Check current URL - if redirected to login page, wait
+    const currentUrl = page.url();
+    const isLoginPage = currentUrl.includes('login.salesforce.com') ||
+                        currentUrl.includes('/login') ||
+                        currentUrl.includes('identity.salesforce.com');
+    
+    if (isLoginPage) {
+      log.debug('AURA', 'User is on login page, waiting...');
+      await page.waitForTimeout(pollInterval);
+      continue;
+    }
+    
+    // Check if Aura is now available
+    const auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'").catch(() => false);
+    
+    if (auraAvailable) {
+      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+      log.info('AURA', `Authentication successful after ${elapsedSec}s`);
+      return true;
+    }
+    
+    // Wait before next check
+    await page.waitForTimeout(pollInterval);
+  }
+  
+  log.warn('AURA', 'Authentication timeout reached');
+  return false;
+}
+
 /**
  * Search for a Salesforce Account by phone, email, or name.
  * Uses the Aura API via Playwright browser context.
+ *
+ * If the user is not authenticated, the browser stays open and waits
+ * for the user to complete the login process before continuing.
  *
  * Search order: phone → email → name
  * Returns as soon as a match is found.
@@ -484,10 +537,41 @@ async function searchAccount({ phone, email, firstName, lastName }) {
     await page.waitForTimeout(3000);
     
     // Check if Aura is available
-    const auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
+    let auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
+    
+    // If Aura not available, wait for user to authenticate
     if (!auraAvailable) {
-      log.warn('AURA', 'Aura framework not available - may need authentication');
-      return { found: false, error: 'SESSION_REQUIRED', message: 'Salesforce session required. Please login first.' };
+      log.warn('AURA', 'Aura framework not available - waiting for user authentication...');
+      
+      // Wait for the user to complete authentication
+      const authenticated = await waitForAuraAuthentication(page);
+      
+      if (!authenticated) {
+        log.error('AURA', 'Authentication timeout - user did not complete login');
+        await context.close();
+        return {
+          found: false,
+          error: 'AUTH_TIMEOUT',
+          message: 'Délai d\'authentification dépassé. Veuillez réessayer.'
+        };
+      }
+      
+      // Re-navigate to Salesforce home after successful auth
+      log.debug('AURA', 'Re-navigating to Salesforce after authentication...');
+      await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(3000);
+      
+      // Verify Aura is now available
+      auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
+      if (!auraAvailable) {
+        log.error('AURA', 'Aura still not available after authentication');
+        await context.close();
+        return {
+          found: false,
+          error: 'AURA_NOT_AVAILABLE',
+          message: 'Erreur Salesforce: framework Aura non disponible.'
+        };
+      }
     }
     
     // Capture Aura credentials
