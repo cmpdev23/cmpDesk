@@ -226,6 +226,26 @@ const salesforceAPI = {
    * }>}
    */
   createDossier: (params) => ipcRenderer.invoke('salesforce:createDossier', params),
+  
+  /**
+   * Upload documents to OpenText Content Server (xECM).
+   *
+   * Documents are uploaded to the workspace associated with the Case.
+   * Files are uploaded sequentially to avoid rate limiting.
+   *
+   * @param {Object} params
+   * @param {string} params.caseId - Salesforce Case ID (required)
+   * @param {Array<{name: string, type: string, size: number, buffer: number[]}>} params.files - Files to upload
+   * @returns {Promise<{
+   *   success: boolean,
+   *   uploadedCount: number,
+   *   failedCount: number,
+   *   workspaceNodeId?: string,
+   *   results: Array<{fileName: string, success: boolean, nodeId?: string, error?: string}>,
+   *   error?: string
+   * }>}
+   */
+  uploadDocuments: (params) => ipcRenderer.invoke('salesforce:uploadDocuments', params),
 };
 
 // ============================================================================
@@ -243,5 +263,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 console.log('🚀 cmpDesk preload script loaded');
 console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
-console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier}');
+console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier, uploadDocuments}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');

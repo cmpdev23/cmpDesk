@@ -450,6 +450,238 @@ const AUTH_WAIT_CONFIG = {
   maxWaitTimeMs: 180000,     // Max 3 minutes to login
 };
 
+// ============================================================================
+// BROWSER OPERATION MUTEX - Prevents concurrent browser context operations
+// ============================================================================
+
+/**
+ * Simple mutex implementation for browser operations.
+ * Ensures only one browser operation runs at a time to prevent:
+ * - Context destroyed errors during navigation
+ * - Race conditions between auth and search operations
+ * - Multiple browser instances fighting for the same profile
+ */
+class BrowserOperationMutex {
+  constructor() {
+    this.locked = false;
+    this.queue = [];
+    this.currentOperation = null;
+  }
+
+  /**
+   * Acquire the lock. If already locked, wait in queue.
+   * @param {string} operationName - Name of the operation for logging
+   * @param {number} timeoutMs - Maximum time to wait for lock (default 60s)
+   * @returns {Promise<boolean>} - True if lock acquired, false if timeout
+   */
+  async acquire(operationName, timeoutMs = 60000) {
+    const startTime = Date.now();
+    
+    if (!this.locked) {
+      this.locked = true;
+      this.currentOperation = operationName;
+      log.debug('MUTEX', `Lock acquired for: ${operationName}`);
+      return true;
+    }
+    
+    log.debug('MUTEX', `Waiting for lock: ${operationName} (blocked by: ${this.currentOperation})`);
+    
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        // Remove from queue on timeout
+        const idx = this.queue.findIndex(item => item.resolve === resolve);
+        if (idx !== -1) this.queue.splice(idx, 1);
+        log.warn('MUTEX', `Lock timeout for: ${operationName} after ${timeoutMs}ms`);
+        resolve(false);
+      }, timeoutMs);
+      
+      this.queue.push({
+        operationName,
+        resolve: (acquired) => {
+          clearTimeout(timeoutId);
+          resolve(acquired);
+        }
+      });
+    });
+  }
+
+  /**
+   * Release the lock and notify next waiting operation.
+   */
+  release() {
+    const releasedOperation = this.currentOperation;
+    log.debug('MUTEX', `Lock released by: ${releasedOperation}`);
+    
+    if (this.queue.length > 0) {
+      const next = this.queue.shift();
+      this.currentOperation = next.operationName;
+      log.debug('MUTEX', `Lock transferred to: ${next.operationName}`);
+      next.resolve(true);
+    } else {
+      this.locked = false;
+      this.currentOperation = null;
+    }
+  }
+
+  /**
+   * Check if lock is currently held.
+   */
+  isLocked() {
+    return this.locked;
+  }
+
+  /**
+   * Get current operation name.
+   */
+  getCurrentOperation() {
+    return this.currentOperation;
+  }
+}
+
+// Global mutex instance for all browser operations
+const browserMutex = new BrowserOperationMutex();
+
+/**
+ * Execute a browser operation with mutex protection.
+ * Automatically acquires and releases the lock.
+ *
+ * @param {string} operationName - Name for logging
+ * @param {Function} operation - Async function to execute
+ * @param {Object} options - Options
+ * @param {number} options.timeoutMs - Lock acquisition timeout
+ * @param {number} options.retries - Number of retries on navigation errors
+ * @returns {Promise<any>} - Result of the operation
+ */
+async function withBrowserMutex(operationName, operation, options = {}) {
+  const { timeoutMs = 60000, retries = 2 } = options;
+  
+  const acquired = await browserMutex.acquire(operationName, timeoutMs);
+  if (!acquired) {
+    return {
+      found: false,
+      success: false,
+      error: 'BROWSER_BUSY',
+      message: 'Une autre opération est en cours. Veuillez patienter et réessayer.'
+    };
+  }
+  
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        log.info('MUTEX', `Retry attempt ${attempt}/${retries} for: ${operationName}`);
+        // Small delay before retry
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      
+      const result = await operation();
+      browserMutex.release();
+      return result;
+      
+    } catch (error) {
+      lastError = error;
+      const isNavigationError =
+        error.message?.includes('Execution context was destroyed') ||
+        error.message?.includes('Target page, context or browser has been closed') ||
+        error.message?.includes('navigation');
+      
+      if (isNavigationError && attempt < retries) {
+        log.warn('MUTEX', `Navigation error in ${operationName}, will retry: ${error.message}`);
+        continue;
+      }
+      
+      // Non-retryable error or max retries reached
+      break;
+    }
+  }
+  
+  browserMutex.release();
+  throw lastError;
+}
+
+/**
+ * Wait for Salesforce page to be fully loaded and stable.
+ * Replaces fixed waitForTimeout with proper condition checks.
+ *
+ * @param {Page} page - Playwright page instance
+ * @param {Object} options - Options
+ * @param {boolean} options.waitForAura - Whether to wait for Aura framework
+ * @param {number} options.timeoutMs - Maximum wait time (default 15s)
+ * @returns {Promise<boolean>} - True if page is ready
+ */
+async function waitForSalesforceReady(page, options = {}) {
+  const { waitForAura = true, timeoutMs = 15000 } = options;
+  const startTime = Date.now();
+  
+  try {
+    // Wait for network to be mostly idle (no more than 2 connections for 500ms)
+    await page.waitForLoadState('networkidle', { timeout: timeoutMs }).catch(() => {
+      log.debug('AURA', 'Network idle timeout, continuing anyway...');
+    });
+    
+    // Wait for DOM to be stable (no major layout shifts)
+    await page.waitForFunction(() => {
+      return document.readyState === 'complete';
+    }, { timeout: Math.max(1000, timeoutMs - (Date.now() - startTime)) }).catch(() => {});
+    
+    if (waitForAura) {
+      // Wait for Aura framework to be available
+      const auraReady = await page.waitForFunction(
+        "typeof $A !== 'undefined' && typeof $A.getContext === 'function'",
+        { timeout: Math.max(1000, timeoutMs - (Date.now() - startTime)) }
+      ).then(() => true).catch(() => false);
+      
+      if (!auraReady) {
+        log.debug('AURA', 'Aura framework not ready within timeout');
+        return false;
+      }
+    }
+    
+    log.debug('AURA', `Salesforce ready after ${Date.now() - startTime}ms`);
+    return true;
+    
+  } catch (error) {
+    log.debug('AURA', `waitForSalesforceReady error: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Safe page.evaluate wrapper with retry on navigation errors.
+ *
+ * @param {Page} page - Playwright page instance
+ * @param {string|Function} script - Script to evaluate
+ * @param {Object} options - Options
+ * @param {number} options.retries - Number of retries (default 2)
+ * @param {number} options.retryDelayMs - Delay between retries (default 500ms)
+ * @returns {Promise<any>} - Result of evaluation
+ */
+async function safeEvaluate(page, script, options = {}) {
+  const { retries = 2, retryDelayMs = 500 } = options;
+  let lastError;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await page.evaluate(script);
+    } catch (error) {
+      lastError = error;
+      const isNavigationError =
+        error.message?.includes('Execution context was destroyed') ||
+        error.message?.includes('navigation');
+      
+      if (isNavigationError && attempt < retries) {
+        log.debug('AURA', `Evaluate failed due to navigation, retry ${attempt + 1}/${retries}`);
+        await new Promise(r => setTimeout(r, retryDelayMs));
+        // Wait for page to stabilize after navigation
+        await waitForSalesforceReady(page, { waitForAura: false, timeoutMs: 5000 });
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Wait for Salesforce Aura framework to become available (user authenticated).
  * Polls the page until $A is defined or timeout is reached.
@@ -465,29 +697,44 @@ async function waitForAuraAuthentication(page, maxWaitMs = AUTH_WAIT_CONFIG.maxW
   log.info('AURA', `Waiting for user to authenticate (timeout: ${maxWaitMs / 1000}s)...`);
   
   while (Date.now() - startTime < maxWaitMs) {
-    // Check current URL - if redirected to login page, wait
-    const currentUrl = page.url();
-    const isLoginPage = currentUrl.includes('login.salesforce.com') ||
-                        currentUrl.includes('/login') ||
-                        currentUrl.includes('identity.salesforce.com');
-    
-    if (isLoginPage) {
-      log.debug('AURA', 'User is on login page, waiting...');
+    try {
+      // Check current URL - if redirected to login page, wait
+      const currentUrl = page.url();
+      const isLoginPage = currentUrl.includes('login.salesforce.com') ||
+                          currentUrl.includes('/login') ||
+                          currentUrl.includes('identity.salesforce.com');
+      
+      if (isLoginPage) {
+        log.debug('AURA', 'User is on login page, waiting...');
+        await page.waitForTimeout(pollInterval);
+        continue;
+      }
+      
+      // Check if Aura is now available (using safe evaluate)
+      const auraAvailable = await safeEvaluate(
+        page,
+        "typeof $A !== 'undefined' && typeof $A.getContext === 'function'",
+        { retries: 1, retryDelayMs: 500 }
+      ).catch(() => false);
+      
+      if (auraAvailable) {
+        const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+        log.info('AURA', `Authentication successful after ${elapsedSec}s`);
+        return true;
+      }
+      
+      // Wait before next check
       await page.waitForTimeout(pollInterval);
-      continue;
+    } catch (error) {
+      // Handle page closed errors gracefully
+      if (error.message?.includes('Target page, context or browser has been closed')) {
+        log.warn('AURA', 'Browser was closed during authentication wait');
+        return false;
+      }
+      // For other errors, continue polling
+      log.debug('AURA', `Polling error (continuing): ${error.message}`);
+      await new Promise(r => setTimeout(r, pollInterval));
     }
-    
-    // Check if Aura is now available
-    const auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'").catch(() => false);
-    
-    if (auraAvailable) {
-      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
-      log.info('AURA', `Authentication successful after ${elapsedSec}s`);
-      return true;
-    }
-    
-    // Wait before next check
-    await page.waitForTimeout(pollInterval);
   }
   
   log.warn('AURA', 'Authentication timeout reached');
@@ -514,65 +761,78 @@ async function waitForAuraAuthentication(page, maxWaitMs = AUTH_WAIT_CONFIG.maxW
 async function searchAccount({ phone, email, firstName, lastName }) {
   log.info('AURA', 'Starting account search', { phone: phone ? '***' : null, email: email ? '***' : null, name: `${firstName} ${lastName}` });
   
-  const auth = await getAuthModule();
-  const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
-  
-  let context;
-  try {
-    // Launch browser with persistent context
-    context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
-      headless: false,
-      viewport: { width: 1280, height: 900 },
-      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
-    });
+  // Use mutex to prevent concurrent browser operations
+  return withBrowserMutex('searchAccount', async () => {
+    const auth = await getAuthModule();
+    const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
     
-    // Restore cookies
-    await restoreCookies(context);
-    
-    const page = context.pages()[0] || await context.newPage();
-    
-    // Navigate to Salesforce Lightning
-    log.debug('AURA', 'Navigating to Salesforce...');
-    await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(3000);
-    
-    // Check if Aura is available
-    let auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
-    
-    // If Aura not available, wait for user to authenticate
-    if (!auraAvailable) {
-      log.warn('AURA', 'Aura framework not available - waiting for user authentication...');
+    let context;
+    try {
+      // Launch browser with persistent context
+      context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+        headless: false,
+        viewport: { width: 1280, height: 900 },
+        args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+      });
       
-      // Wait for the user to complete authentication
-      const authenticated = await waitForAuraAuthentication(page);
+      // Restore cookies
+      await restoreCookies(context);
       
-      if (!authenticated) {
-        log.error('AURA', 'Authentication timeout - user did not complete login');
-        await context.close();
-        return {
-          found: false,
-          error: 'AUTH_TIMEOUT',
-          message: 'Délai d\'authentification dépassé. Veuillez réessayer.'
-        };
-      }
+      const page = context.pages()[0] || await context.newPage();
       
-      // Re-navigate to Salesforce home after successful auth
-      log.debug('AURA', 'Re-navigating to Salesforce after authentication...');
+      // Navigate to Salesforce Lightning
+      log.debug('AURA', 'Navigating to Salesforce...');
       await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(3000);
       
-      // Verify Aura is now available
-      auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
+      // Wait for Salesforce to be fully loaded (replaces fixed waitForTimeout)
+      await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+      
+      // Check if Aura is available using safe evaluate
+      let auraAvailable = await safeEvaluate(
+        page,
+        "typeof $A !== 'undefined' && typeof $A.getContext === 'function'"
+      ).catch(() => false);
+      
+      // If Aura not available, wait for user to authenticate
       if (!auraAvailable) {
-        log.error('AURA', 'Aura still not available after authentication');
-        await context.close();
-        return {
-          found: false,
-          error: 'AURA_NOT_AVAILABLE',
-          message: 'Erreur Salesforce: framework Aura non disponible.'
-        };
+        log.warn('AURA', 'Aura framework not available - waiting for user authentication...');
+        
+        // Wait for the user to complete authentication
+        const authenticated = await waitForAuraAuthentication(page);
+        
+        if (!authenticated) {
+          log.error('AURA', 'Authentication timeout - user did not complete login');
+          await context.close();
+          return {
+            found: false,
+            error: 'AUTH_TIMEOUT',
+            message: 'Délai d\'authentification dépassé. Veuillez réessayer.'
+          };
+        }
+        
+        // Re-navigate to Salesforce home after successful auth
+        log.debug('AURA', 'Re-navigating to Salesforce after authentication...');
+        await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        
+        // Wait for Salesforce to be fully loaded
+        await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+        
+        // Verify Aura is now available
+        auraAvailable = await safeEvaluate(
+          page,
+          "typeof $A !== 'undefined' && typeof $A.getContext === 'function'"
+        ).catch(() => false);
+        
+        if (!auraAvailable) {
+          log.error('AURA', 'Aura still not available after authentication');
+          await context.close();
+          return {
+            found: false,
+            error: 'AURA_NOT_AVAILABLE',
+            message: 'Erreur Salesforce: framework Aura non disponible.'
+          };
+        }
       }
-    }
     
     // Capture Aura credentials
     log.debug('AURA', 'Capturing Aura credentials...');
@@ -695,22 +955,23 @@ async function searchAccount({ phone, email, firstName, lastName }) {
       }
     }
     
-    // No match found
-    log.info('AURA', 'No account found after all search attempts');
-    await saveCookies(context);
-    await context.close();
-    return { found: false };
-    
-  } catch (e) {
-    log.error('AURA', 'Search error', e);
-    if (context) await context.close().catch(() => {});
-    
-    if (e.message.includes('lock') || e.message.includes('already in use')) {
-      return { found: false, error: 'BROWSER_PROFILE_LOCKED', message: 'Browser already open' };
+      // No match found
+      log.info('AURA', 'No account found after all search attempts');
+      await saveCookies(context);
+      await context.close();
+      return { found: false };
+      
+    } catch (e) {
+      log.error('AURA', 'Search error', e);
+      if (context) await context.close().catch(() => {});
+      
+      if (e.message.includes('lock') || e.message.includes('already in use')) {
+        return { found: false, error: 'BROWSER_PROFILE_LOCKED', message: 'Browser already open' };
+      }
+      
+      return { found: false, error: 'SEARCH_ERROR', message: e.message };
     }
-    
-    return { found: false, error: 'SEARCH_ERROR', message: e.message };
-  }
+  }, { retries: 2 });  // withBrowserMutex options: retry on navigation errors
 }
 
 /**
@@ -728,55 +989,68 @@ async function searchAccount({ phone, email, firstName, lastName }) {
 async function createAccount({ firstName, lastName, phone, email }) {
   log.info('AURA', 'Starting account creation', { firstName, lastName, hasPhone: !!phone, hasEmail: !!email });
   
-  const result = {
-    success: false,
-    accountId: null,
-    accountName: null,
-    accountUrl: null,
-    error: null,
-  };
-  
+  // Validation before acquiring mutex
   if (!lastName) {
-    result.error = 'LastName is required';
-    return result;
+    return {
+      success: false,
+      accountId: null,
+      accountName: null,
+      accountUrl: null,
+      error: 'LastName is required',
+    };
   }
   
-  const auth = await getAuthModule();
-  const { chromium, restoreCookies, BROWSER_PROFILE } = auth;
-  
-  let context;
-  try {
-    // Launch browser with persistent context
-    context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
-      headless: false,
-      viewport: { width: 1280, height: 900 },
-      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
-    });
+  // Use mutex to prevent concurrent browser operations
+  return withBrowserMutex('createAccount', async () => {
+    const result = {
+      success: false,
+      accountId: null,
+      accountName: null,
+      accountUrl: null,
+      error: null,
+    };
     
-    await restoreCookies(context);
-    const page = context.pages()[0] || await context.newPage();
+    const auth = await getAuthModule();
+    const { chromium, restoreCookies, BROWSER_PROFILE } = auth;
     
-    // Navigate to Salesforce
-    log.debug('AURA', 'Navigating to Salesforce...');
-    await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(3000);
-    
-    // Check if Aura is available
-    let auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
-    
-    if (!auraAvailable) {
-      log.warn('AURA', 'Aura not available - waiting for authentication...');
-      const authenticated = await waitForAuraAuthentication(page);
+    let context;
+    try {
+      // Launch browser with persistent context
+      context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+        headless: false,
+        viewport: { width: 1280, height: 900 },
+        args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+      });
       
-      if (!authenticated) {
-        result.error = 'Authentication timeout';
-        await context.close();
-        return result;
-      }
+      await restoreCookies(context);
+      const page = context.pages()[0] || await context.newPage();
       
+      // Navigate to Salesforce
+      log.debug('AURA', 'Navigating to Salesforce...');
       await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(3000);
-    }
+      
+      // Wait for Salesforce to be fully loaded
+      await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+      
+      // Check if Aura is available using safe evaluate
+      let auraAvailable = await safeEvaluate(
+        page,
+        "typeof $A !== 'undefined' && typeof $A.getContext === 'function'"
+      ).catch(() => false);
+      
+      if (!auraAvailable) {
+        log.warn('AURA', 'Aura not available - waiting for authentication...');
+        const authenticated = await waitForAuraAuthentication(page);
+        
+        if (!authenticated) {
+          result.error = 'Authentication timeout';
+          await context.close();
+          return result;
+        }
+        
+        await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+      }
     
     // Capture Aura credentials
     log.debug('AURA', 'Capturing Aura credentials...');
@@ -925,12 +1199,13 @@ async function createAccount({ firstName, lastName, phone, email }) {
     await context.close();
     return result;
     
-  } catch (e) {
-    log.error('AURA', 'Account creation exception', e);
-    result.error = e.message;
-    if (context) await context.close();
-    return result;
-  }
+    } catch (e) {
+      log.error('AURA', 'Account creation exception', e);
+      result.error = e.message;
+      if (context) await context.close();
+      return result;
+    }
+  }, { retries: 1 });  // withBrowserMutex for createAccount
 }
 
 /**
@@ -950,57 +1225,72 @@ async function createAccount({ firstName, lastName, phone, email }) {
 async function createDossier({ accountId, opportunityData, caseData }) {
   log.info('AURA', 'Starting dossier creation', { accountId, hasOppData: !!opportunityData, hasCaseData: !!caseData });
   
-  const result = {
-    success: false,
-    opportunityId: null,
-    opportunityUrl: null,
-    caseId: null,
-    caseUrl: null,
-    error: null,
-    warning: null,
-  };
-  
+  // Validation before acquiring mutex
   if (!accountId) {
-    result.error = 'Account ID is required';
-    return result;
+    return {
+      success: false,
+      opportunityId: null,
+      opportunityUrl: null,
+      caseId: null,
+      caseUrl: null,
+      error: 'Account ID is required',
+      warning: null,
+    };
   }
   
-  const auth = await getAuthModule();
-  const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
-  
-  let context;
-  try {
-    // Launch browser with persistent context
-    context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
-      headless: false,
-      viewport: { width: 1280, height: 900 },
-      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
-    });
+  // Use mutex to prevent concurrent browser operations
+  return withBrowserMutex('createDossier', async () => {
+    const result = {
+      success: false,
+      opportunityId: null,
+      opportunityUrl: null,
+      caseId: null,
+      caseUrl: null,
+      error: null,
+      warning: null,
+    };
     
-    await restoreCookies(context);
-    const page = context.pages()[0] || await context.newPage();
+    const auth = await getAuthModule();
+    const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
     
-    // Navigate to Salesforce
-    log.debug('AURA', 'Navigating to Salesforce...');
-    await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(3000);
-    
-    // Check if Aura is available
-    let auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
-    
-    if (!auraAvailable) {
-      log.warn('AURA', 'Aura not available - waiting for authentication...');
-      const authenticated = await waitForAuraAuthentication(page);
+    let context;
+    try {
+      // Launch browser with persistent context
+      context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+        headless: false,
+        viewport: { width: 1280, height: 900 },
+        args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+      });
       
-      if (!authenticated) {
-        result.error = 'Authentication timeout';
-        await context.close();
-        return result;
-      }
+      await restoreCookies(context);
+      const page = context.pages()[0] || await context.newPage();
       
+      // Navigate to Salesforce
+      log.debug('AURA', 'Navigating to Salesforce...');
       await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(3000);
-    }
+      
+      // Wait for Salesforce to be fully loaded
+      await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+      
+      // Check if Aura is available using safe evaluate
+      let auraAvailable = await safeEvaluate(
+        page,
+        "typeof $A !== 'undefined' && typeof $A.getContext === 'function'"
+      ).catch(() => false);
+      
+      if (!auraAvailable) {
+        log.warn('AURA', 'Aura not available - waiting for authentication...');
+        const authenticated = await waitForAuraAuthentication(page);
+        
+        if (!authenticated) {
+          result.error = 'Authentication timeout';
+          await context.close();
+          return result;
+        }
+        
+        await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+      }
     
     // Capture Aura credentials
     log.debug('AURA', 'Capturing Aura credentials...');
@@ -1479,13 +1769,523 @@ async function createDossier({ accountId, opportunityData, caseData }) {
     await context.close();
     return result;
     
-  } catch (e) {
-    log.error('AURA', 'Dossier creation error', e);
-    if (context) await context.close().catch(() => {});
+    } catch (e) {
+      log.error('AURA', 'Dossier creation error', e);
+      if (context) await context.close().catch(() => {});
+      
+      result.error = e.message;
+      return result;
+    }
+  }, { retries: 1 });  // withBrowserMutex for createDossier
+}
+
+// ============================================================================
+// UPLOAD DOCUMENTS (OpenText xECM)
+// ============================================================================
+
+const OPENTEXT_BASE_URL = 'https://otcs.ia.ca/cs/cs';
+const OPENTEXT_API_V2 = `${OPENTEXT_BASE_URL}/api/v2`;
+const DESCRIPTOR_GET_PERSPECTIVE = 'apex://xecm.CanvasAppController/ACTION$getPerspectiveParameters';
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.xlsx', '.xls', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+const CONTENT_TYPES = {
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+};
+
+function sanitizeFilename(filename) {
+  return filename
+    .replace(/[<>:"/\\|?*]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .substring(0, 200);
+}
+
+function getContentType(filename) {
+  const ext = '.' + filename.split('.').pop().toLowerCase();
+  return CONTENT_TYPES[ext] || 'application/octet-stream';
+}
+
+function isExtensionAllowed(filename) {
+  const ext = '.' + filename.split('.').pop().toLowerCase();
+  return ALLOWED_EXTENSIONS.includes(ext);
+}
+
+/**
+ * Fetch OTDS token via Aura API.
+ */
+async function fetchOtdsToken(page, credentials, caseId) {
+  log.debug('UPLOAD', 'Fetching OTDS token for case', { caseId });
+  
+  try {
+    const result = await safeEvaluate(page, async ({ credentials, caseId, descriptor }) => {
+      const message = {
+        actions: [{
+          id: '1',
+          descriptor: descriptor,
+          callingDescriptor: 'UNKNOWN',
+          params: {
+            recordId: caseId,
+            removeCSHeader: false,
+            perspectiveType: 'Workspace',
+            parameters: '',
+          },
+        }],
+      };
+      
+      const body = new URLSearchParams();
+      body.append('message', JSON.stringify(message));
+      body.append('aura.context', JSON.stringify(credentials.context));
+      body.append('aura.token', credentials.token || 'undefined');
+      
+      const response = await fetch('/aura?apex.xecm.CanvasAppController.getPerspectiveParameters=1&r=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: body.toString(),
+        credentials: 'include',
+      });
+      
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      
+      const rawText = await response.text();
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { success: false, error: 'No JSON in response' };
+      
+      const data = JSON.parse(jsonMatch[0]);
+      const action = data.actions?.[0];
+      if (!action || action.state !== 'SUCCESS') {
+        return { success: false, error: action?.error?.[0]?.message || 'Aura action failed' };
+      }
+      
+      const params = JSON.parse(action.returnValue);
+      if (!params.token) return { success: false, error: 'No token in response - workspace may not exist yet' };
+      
+      let nodeId = null;
+      if (params.perspectiveUrl) {
+        const match = params.perspectiveUrl.match(/\/nodes\/(\d+)/);
+        if (match) nodeId = match[1];
+      }
+      
+      if (!nodeId) return { success: false, error: 'Workspace node ID not found' };
+      
+      return { success: true, token: params.token, nodeId };
+    }, { retries: 1 });
     
-    result.error = e.message;
+    // Note: page.evaluate doesn't accept complex args directly, so we need a different approach
+    // Let's use the browser's fetch directly
+    
     return result;
+  } catch (e) {
+    log.error('UPLOAD', 'Error fetching OTDS token', { error: e.message });
+    return { success: false, error: e.message };
   }
+}
+
+/**
+ * Upload a single document to OpenText Content Server.
+ */
+async function uploadSingleDocument({ fileName, fileBuffer, parentNodeId, otdsToken }) {
+  const sanitizedName = sanitizeFilename(fileName);
+  const contentType = getContentType(fileName);
+  
+  log.debug('UPLOAD', 'Uploading document', { fileName: sanitizedName, size: fileBuffer.length });
+  
+  const boundary = `----WebKitFormBoundary${Date.now().toString(16)}`;
+  const parts = [];
+  
+  parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="type"\r\n\r\n144\r\n`);
+  parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="parent_id"\r\n\r\n${parentNodeId}\r\n`);
+  parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${sanitizedName}\r\n`);
+  parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${sanitizedName}"\r\nContent-Type: ${contentType}\r\n\r\n`);
+  
+  const preamble = Buffer.from(parts.join(''), 'utf8');
+  const epilogue = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+  const body = Buffer.concat([preamble, fileBuffer, epilogue]);
+  
+  try {
+    const response = await fetch(`${OPENTEXT_API_V2}/nodes`, {
+      method: 'POST',
+      headers: {
+        OTDSTicket: otdsToken,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        Accept: 'application/json',
+      },
+      body: body,
+    });
+    
+    const responseText = await response.text();
+    
+    if (response.ok) {
+      try {
+        const result = JSON.parse(responseText);
+        const nodeId = result.results?.data?.properties?.id || result.id;
+        log.info('UPLOAD', 'Document uploaded successfully', { fileName: sanitizedName, nodeId });
+        return { success: true, nodeId, fileName: sanitizedName };
+      } catch {
+        log.info('UPLOAD', 'Document uploaded (no node ID in response)', { fileName: sanitizedName });
+        return { success: true, fileName: sanitizedName };
+      }
+    } else {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = JSON.parse(responseText);
+        if (errorData.error) errorMessage = errorData.error;
+      } catch {}
+      
+      log.error('UPLOAD', 'Document upload failed', { fileName: sanitizedName, error: errorMessage });
+      return { success: false, fileName: sanitizedName, error: errorMessage };
+    }
+  } catch (e) {
+    log.error('UPLOAD', 'Document upload error', { fileName: sanitizedName, error: e.message });
+    return { success: false, fileName: sanitizedName, error: e.message };
+  }
+}
+
+/**
+ * Upload documents to OpenText Content Server (xECM).
+ *
+ * @param {Object} params - Upload parameters
+ * @param {string} params.caseId - Salesforce Case ID
+ * @param {Array<{name: string, type: string, size: number, buffer: number[]}>} params.files - Files to upload
+ * @returns {Promise<UploadDocumentsResult>}
+ */
+async function uploadDocuments({ caseId, files }) {
+  log.info('UPLOAD', 'Starting document upload', { caseId, fileCount: files?.length || 0 });
+  
+  // Basic validation before acquiring mutex
+  if (!caseId) {
+    return { success: false, uploadedCount: 0, failedCount: files?.length || 0, results: [], error: 'caseId is required' };
+  }
+  
+  if (!files || files.length === 0) {
+    return { success: false, uploadedCount: 0, failedCount: 0, results: [], error: 'No files provided' };
+  }
+  
+  // Validate files
+  for (const file of files) {
+    if (!isExtensionAllowed(file.name)) {
+      return { success: false, uploadedCount: 0, failedCount: files.length, results: [], error: `File type not allowed: ${file.name}` };
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return { success: false, uploadedCount: 0, failedCount: files.length, results: [], error: `File too large (max 25 MB): ${file.name}` };
+    }
+  }
+  
+  // Use mutex to prevent concurrent browser operations
+  return withBrowserMutex('uploadDocuments', async () => {
+    const result = {
+      success: false,
+      uploadedCount: 0,
+      failedCount: 0,
+      results: [],
+      error: null,
+    };
+    
+    const auth = await getAuthModule();
+    const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
+    
+    let context;
+    try {
+      context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+        headless: false,
+        viewport: { width: 1280, height: 900 },
+        args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+      });
+      
+      await restoreCookies(context);
+      const page = context.pages()[0] || await context.newPage();
+      
+      // Navigate to Salesforce
+      log.debug('UPLOAD', 'Navigating to Salesforce...');
+      await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+      
+      // Check Aura availability
+      let auraAvailable = await safeEvaluate(
+        page,
+        "typeof $A !== 'undefined' && typeof $A.getContext === 'function'"
+      ).catch(() => false);
+      
+      if (!auraAvailable) {
+        log.warn('UPLOAD', 'Aura not available - waiting for authentication...');
+        const authenticated = await waitForAuraAuthentication(page);
+        
+        if (!authenticated) {
+          result.error = 'Authentication timeout';
+          result.failedCount = files.length;
+          await context.close();
+          return result;
+        }
+        
+        await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 10000 });
+      }
+      
+      // Capture Aura credentials
+      log.debug('UPLOAD', 'Capturing Aura credentials...');
+      const credentials = await captureAuraCredentials(page);
+      if (!credentials) {
+        result.error = 'Could not capture Aura credentials';
+        result.failedCount = files.length;
+        await context.close();
+        return result;
+      }
+      
+      // Fetch OTDS token
+      log.info('UPLOAD', 'Fetching OTDS token...');
+      
+      // Execute token fetch in browser context
+      let tokenResult = await page.evaluate(async ({ caseId, credentials, descriptor }) => {
+        const message = {
+          actions: [{
+            id: '1',
+            descriptor: descriptor,
+            callingDescriptor: 'UNKNOWN',
+            params: {
+              recordId: caseId,
+              removeCSHeader: false,
+              perspectiveType: 'Workspace',
+              parameters: '',
+            },
+          }],
+        };
+        
+        const body = new URLSearchParams();
+        body.append('message', JSON.stringify(message));
+        body.append('aura.context', JSON.stringify(credentials.context));
+        body.append('aura.token', credentials.token || 'undefined');
+        
+        try {
+          const response = await fetch('/aura?apex.xecm.CanvasAppController.getPerspectiveParameters=1&r=1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString(),
+            credentials: 'include',
+          });
+          
+          if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+          
+          const rawText = await response.text();
+          const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) return { success: false, error: 'No JSON in response' };
+          
+          const data = JSON.parse(jsonMatch[0]);
+          const action = data.actions?.[0];
+          if (!action || action.state !== 'SUCCESS') {
+            return { success: false, error: action?.error?.[0]?.message || 'Aura action failed' };
+          }
+          
+          const params = JSON.parse(action.returnValue);
+          if (!params.token) return { success: false, error: 'No token - workspace may not exist yet' };
+          
+          let nodeId = null;
+          if (params.perspectiveUrl) {
+            const match = params.perspectiveUrl.match(/\/nodes\/(\d+)/);
+            if (match) nodeId = match[1];
+          }
+          
+          if (!nodeId) return { success: false, error: 'Workspace node ID not found' };
+          
+          return { success: true, token: params.token, nodeId };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      }, { caseId, credentials, descriptor: DESCRIPTOR_GET_PERSPECTIVE });
+      
+      // Retry token fetch once if failed
+      if (!tokenResult.success) {
+        log.warn('UPLOAD', 'Token fetch failed, retrying in 3s...', { error: tokenResult.error });
+        await new Promise(r => setTimeout(r, 3000));
+        
+        tokenResult = await page.evaluate(async ({ caseId, credentials, descriptor }) => {
+          // Same code as above...
+          const message = {
+            actions: [{
+              id: '1',
+              descriptor: descriptor,
+              callingDescriptor: 'UNKNOWN',
+              params: {
+                recordId: caseId,
+                removeCSHeader: false,
+                perspectiveType: 'Workspace',
+                parameters: '',
+              },
+            }],
+          };
+          
+          const body = new URLSearchParams();
+          body.append('message', JSON.stringify(message));
+          body.append('aura.context', JSON.stringify(credentials.context));
+          body.append('aura.token', credentials.token || 'undefined');
+          
+          try {
+            const response = await fetch('/aura?apex.xecm.CanvasAppController.getPerspectiveParameters=1&r=1', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+              body: body.toString(),
+              credentials: 'include',
+            });
+            
+            if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+            
+            const rawText = await response.text();
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) return { success: false, error: 'No JSON in response' };
+            
+            const data = JSON.parse(jsonMatch[0]);
+            const action = data.actions?.[0];
+            if (!action || action.state !== 'SUCCESS') {
+              return { success: false, error: action?.error?.[0]?.message || 'Aura action failed' };
+            }
+            
+            const params = JSON.parse(action.returnValue);
+            if (!params.token) return { success: false, error: 'No token - workspace may not exist yet' };
+            
+            let nodeId = null;
+            if (params.perspectiveUrl) {
+              const match = params.perspectiveUrl.match(/\/nodes\/(\d+)/);
+              if (match) nodeId = match[1];
+            }
+            
+            if (!nodeId) return { success: false, error: 'Workspace node ID not found' };
+            
+            return { success: true, token: params.token, nodeId };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        }, { caseId, credentials, descriptor: DESCRIPTOR_GET_PERSPECTIVE });
+      }
+      
+      if (!tokenResult.success) {
+        result.error = `Failed to get OTDS token: ${tokenResult.error}`;
+        result.failedCount = files.length;
+        await saveCookies(context);
+        await context.close();
+        return result;
+      }
+      
+      const { token: otdsToken, nodeId: workspaceNodeId } = tokenResult;
+      result.workspaceNodeId = workspaceNodeId;
+      
+      // Upload each document sequentially
+      log.info('UPLOAD', `Uploading ${files.length} document(s) to workspace ${workspaceNodeId}`);
+      
+      for (const file of files) {
+        const fileBuffer = Buffer.from(file.buffer);
+        const uploadResult = await uploadSingleDocument({
+          fileName: file.name,
+          fileBuffer,
+          parentNodeId: workspaceNodeId,
+          otdsToken,
+        });
+        
+        result.results.push({
+          fileName: file.name,
+          success: uploadResult.success,
+          nodeId: uploadResult.nodeId,
+          error: uploadResult.error,
+        });
+        
+        if (uploadResult.success) {
+          result.uploadedCount++;
+        } else {
+          result.failedCount++;
+          
+          // If 401, try to refresh token and retry
+          if (uploadResult.error && uploadResult.error.includes('401')) {
+            log.warn('UPLOAD', 'Token expired, refreshing...');
+            const refreshResult = await page.evaluate(async ({ caseId, credentials, descriptor }) => {
+              // Token fetch code (same as above)
+              const message = {
+                actions: [{
+                  id: '1',
+                  descriptor: descriptor,
+                  callingDescriptor: 'UNKNOWN',
+                  params: { recordId: caseId, removeCSHeader: false, perspectiveType: 'Workspace', parameters: '' },
+                }],
+              };
+              const body = new URLSearchParams();
+              body.append('message', JSON.stringify(message));
+              body.append('aura.context', JSON.stringify(credentials.context));
+              body.append('aura.token', credentials.token || 'undefined');
+              try {
+                const response = await fetch('/aura?apex.xecm.CanvasAppController.getPerspectiveParameters=1&r=1', {
+                  method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                  body: body.toString(), credentials: 'include',
+                });
+                if (!response.ok) return { success: false };
+                const rawText = await response.text();
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) return { success: false };
+                const data = JSON.parse(jsonMatch[0]);
+                const action = data.actions?.[0];
+                if (!action || action.state !== 'SUCCESS') return { success: false };
+                const params = JSON.parse(action.returnValue);
+                if (!params.token) return { success: false };
+                return { success: true, token: params.token };
+              } catch { return { success: false }; }
+            }, { caseId, credentials, descriptor: DESCRIPTOR_GET_PERSPECTIVE });
+            
+            if (refreshResult.success) {
+              const retryResult = await uploadSingleDocument({
+                fileName: file.name,
+                fileBuffer,
+                parentNodeId: workspaceNodeId,
+                otdsToken: refreshResult.token,
+              });
+              
+              const lastIdx = result.results.length - 1;
+              result.results[lastIdx] = {
+                fileName: file.name,
+                success: retryResult.success,
+                nodeId: retryResult.nodeId,
+                error: retryResult.error,
+              };
+              
+              if (retryResult.success) {
+                result.uploadedCount++;
+                result.failedCount--;
+              }
+            }
+          }
+        }
+      }
+      
+      result.success = result.failedCount === 0;
+      if (result.failedCount > 0) {
+        result.error = `${result.failedCount} document(s) failed to upload`;
+      }
+      
+      log.info('UPLOAD', 'Document upload complete', {
+        uploadedCount: result.uploadedCount,
+        failedCount: result.failedCount,
+      });
+      
+      await saveCookies(context);
+      await context.close();
+      return result;
+      
+    } catch (e) {
+      log.error('UPLOAD', 'Upload documents error', e);
+      if (context) await context.close().catch(() => {});
+      return {
+        success: false,
+        uploadedCount: 0,
+        failedCount: files.length,
+        results: [],
+        error: e.message,
+      };
+    }
+  }, { retries: 1 });
 }
 
 /**
@@ -2576,6 +3376,26 @@ ipcMain.handle('salesforce:createDossier', async (event, params) => {
     log.error('IPC', 'salesforce:createDossier error', e);
     return {
       success: false,
+      error: e.message,
+    };
+  }
+});
+
+// Upload documents to OpenText (xECM)
+ipcMain.handle('salesforce:uploadDocuments', async (event, params) => {
+  try {
+    log.info('IPC', 'salesforce:uploadDocuments called', {
+      caseId: params?.caseId,
+      fileCount: params?.files?.length || 0,
+    });
+    return await uploadDocuments(params);
+  } catch (e) {
+    log.error('IPC', 'salesforce:uploadDocuments error', e);
+    return {
+      success: false,
+      uploadedCount: 0,
+      failedCount: params?.files?.length || 0,
+      results: [],
       error: e.message,
     };
   }

@@ -246,6 +246,58 @@ export interface CreateDossierResult {
   warning?: string;
 }
 
+// ============================================================================
+// DOCUMENT UPLOAD
+// ============================================================================
+
+/** File data for upload (serializable via IPC) */
+export interface UploadFileData {
+  /** File name */
+  name: string;
+  /** MIME type */
+  type: string;
+  /** File size in bytes */
+  size: number;
+  /** File content as number array (from ArrayBuffer) */
+  buffer: number[];
+}
+
+/** Upload documents parameters */
+export interface UploadDocumentsParams {
+  /** Salesforce Case ID (500...) - required */
+  caseId: string;
+  /** Files to upload */
+  files: UploadFileData[];
+}
+
+/** Individual file upload result */
+export interface UploadFileResult {
+  /** File name */
+  fileName: string;
+  /** Whether upload was successful */
+  success: boolean;
+  /** OpenText node ID if successful */
+  nodeId?: string;
+  /** Error message if failed */
+  error?: string;
+}
+
+/** Upload documents result */
+export interface UploadDocumentsResult {
+  /** Whether all uploads were successful */
+  success: boolean;
+  /** Number of successfully uploaded documents */
+  uploadedCount: number;
+  /** Number of failed uploads */
+  failedCount: number;
+  /** OpenText workspace node ID */
+  workspaceNodeId?: string;
+  /** Individual results for each file */
+  results: UploadFileResult[];
+  /** Error message if any failures */
+  error?: string | null;
+}
+
 export interface SalesforceAPI {
   /** Search for an account by phone, email, or name */
   searchAccount: (params: AccountSearchParams) => Promise<AccountSearchResult>;
@@ -253,6 +305,8 @@ export interface SalesforceAPI {
   createAccount: (params: CreateAccountParams) => Promise<CreateAccountResult>;
   /** Create a complete dossier (Opportunity + Case) */
   createDossier: (params: CreateDossierParams) => Promise<CreateDossierResult>;
+  /** Upload documents to OpenText Content Server (xECM) */
+  uploadDocuments: (params: UploadDocumentsParams) => Promise<UploadDocumentsResult>;
 }
 
 // ============================================================================

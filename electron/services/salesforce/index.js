@@ -12,6 +12,7 @@ const search = require('./search');
 const opportunity = require('./opportunity');
 const caseService = require('./case');
 const accountService = require('./account');
+const uploadService = require('./upload');
 
 // ============================================================================
 // STATE
@@ -493,6 +494,67 @@ async function createDossier({ accountId, opportunityData, caseData }) {
 }
 
 // ============================================================================
+// DOCUMENT UPLOAD
+// ============================================================================
+
+/**
+ * Upload documents to OpenText Content Server (xECM).
+ *
+ * This function handles:
+ * - Ensuring valid session
+ * - Getting Aura credentials
+ * - Uploading files via the upload service
+ *
+ * @param {object} params - Upload parameters
+ * @param {string} params.caseId - Salesforce Case ID
+ * @param {Array<{name: string, type: string, size: number, buffer: number[]}>} params.files - Files to upload
+ * @returns {Promise<UploadDocumentsResult>}
+ */
+async function uploadDocuments({ caseId, files }) {
+  log.info('SALESFORCE', 'Document upload initiated', { caseId, fileCount: files?.length || 0 });
+  
+  // Ensure we have a session
+  const { success, page } = await authService.ensureSession();
+  
+  if (!success || !page) {
+    return {
+      success: false,
+      uploadedCount: 0,
+      failedCount: files?.length || 0,
+      results: [],
+      error: 'Not authenticated',
+    };
+  }
+  
+  // Get Aura credentials
+  const credentials = await getCredentials();
+  
+  if (!credentials) {
+    return {
+      success: false,
+      uploadedCount: 0,
+      failedCount: files?.length || 0,
+      results: [],
+      error: 'Failed to capture Aura credentials',
+    };
+  }
+  
+  // Perform the upload
+  const result = await uploadService.uploadDocuments(page, credentials, { caseId, files });
+  
+  if (result.success) {
+    log.info('SALESFORCE', 'Document upload complete', {
+      uploadedCount: result.uploadedCount,
+      failedCount: result.failedCount,
+    });
+  } else {
+    log.error('SALESFORCE', 'Document upload failed', { error: result.error });
+  }
+  
+  return result;
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -508,10 +570,14 @@ module.exports = {
   // Dossier operations
   createDossier,
   
+  // Document upload
+  uploadDocuments,
+  
   // Re-export sub-modules for advanced use
   auraClient,
   search,
   opportunity,
   caseService,
   accountService,
+  uploadService,
 };

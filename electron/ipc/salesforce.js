@@ -75,6 +75,28 @@ function register() {
     }
   });
 
+  // Upload documents to OpenText (xECM)
+  ipcMain.handle('salesforce:uploadDocuments', async (_, params) => {
+    log.info('IPC', 'salesforce:uploadDocuments called', {
+      caseId: params?.caseId,
+      fileCount: params?.files?.length || 0,
+    });
+    
+    try {
+      const result = await salesforceService.uploadDocuments(params);
+      return result;
+    } catch (error) {
+      log.error('IPC', 'salesforce:uploadDocuments error', error);
+      return {
+        success: false,
+        uploadedCount: 0,
+        failedCount: params?.files?.length || 0,
+        results: [],
+        error: error.message,
+      };
+    }
+  });
+
   log.debug('IPC', 'Salesforce handlers registered');
 }
 

@@ -10,6 +10,10 @@
 - **NEVER taskkill chrome.exe** — User may be using Chrome. Only kill Chromium if needed
 - **NEVER put seed data in script files** — All test data in `scripts/seeds/` folder
 - **Always wait 5s after navigation before getUserId()** — Lightning globals not available immediately
+- **ALWAYS use `withBrowserMutex()` for browser operations** — Prevents race conditions between concurrent IPC calls (2026-04-07)
+- **NEVER use fixed `waitForTimeout()` after navigation** — Use `waitForSalesforceReady()` instead (2026-04-07)
+- **ALWAYS use `safeEvaluate()` for `page.evaluate()` during navigation** — Handles "Execution context was destroyed" errors (2026-04-07)
+- **ALWAYS register IPC handlers in `electron/main.js`** — If preload.js exposes an API, main.js MUST have the handler. Error "No handler registered for '...'" = missing `ipcMain.handle()` (2026-04-07)
 
 ---
 
@@ -208,13 +212,81 @@ src/
 
 ---
 
+## 📤 Document Upload Implementation
+
+### Architecture (implemented 2026-04-07)
+
+```
+Renderer (Dossiers.tsx)
+    │
+    ├─ handleSubmit() creates Opportunity + Case
+    │
+    └─ If caseId + files exist:
+         │
+         ├─ Wait 2s for OpenText workspace
+         │
+         └─ uploadDocuments(caseId, files)
+               │
+               ▼ IPC
+Main Process (electron/)
+    │
+    ├─ ipc/salesforce.js → salesforce:uploadDocuments handler
+    │
+    └─ services/salesforce/upload.js
+         │
+         ├─ fetchOtdsToken() via Aura API
+         │
+         └─ uploadSingleDocument() → OpenText REST API
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `electron/services/salesforce/upload.js` | Core upload logic |
+| `electron/services/salesforce/index.js` | Exports `uploadDocuments` |
+| `electron/ipc/salesforce.js` | IPC handler |
+| `electron/preload.js` | Exposes `uploadDocuments` to renderer |
+| `src/types/electron.d.ts` | TypeScript types |
+| `src/pages/Dossiers.tsx` | UI integration |
+
+### API Usage
+
+```typescript
+// Renderer: convert File to serializable format
+const filesForUpload = await Promise.all(
+  documentData.files.map(async (f) => ({
+    name: f.name,
+    type: f.type,
+    size: f.size,
+    buffer: Array.from(new Uint8Array(await f.file.arrayBuffer())),
+  }))
+);
+
+// Call IPC
+const result = await window.electronAPI.salesforce.uploadDocuments({
+  caseId: '500JQ00000...',
+  files: filesForUpload,
+});
+```
+
+### Constraints
+
+- **Max file size**: 25 MB per file
+- **Allowed extensions**: PDF, Word, Excel, Images, Text
+- **Sequential upload**: One file at a time to avoid rate limiting
+- **Token refresh**: Auto-retry on 401 (expired token)
+- **Workspace delay**: 2s wait after Case creation before upload
+
+---
+
 ## 📋 Active TODOs
 
-- [ ] Create `lib/upload_document.js` stable function for main.js integration
+- [x] ~~Create `lib/upload_document.js` stable function for main.js integration~~ (Done: `electron/services/salesforce/upload.js`)
 - [ ] Create `lib/create_note.js` integration into main.js
 - [ ] Test refactored Electron structure (`main.refactored.js` → `main.js`)
 - [ ] Add note creation step to Dossiers workflow
-- [ ] Add document upload step to Dossiers workflow
+- [x] ~~Add document upload step to Dossiers workflow~~ (Done: integrated in handleSubmit)
 
 ---
 

@@ -39,7 +39,7 @@ import type {
   DocumentUploadStepData,
   SearchStepStatus,
 } from '@/modules/dossiers';
-import type { AccountSearchResult, CreateDossierResult } from '@/types/electron';
+import type { AccountSearchResult, CreateDossierResult, UploadDocumentsResult } from '@/types/electron';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -109,6 +109,7 @@ function Dossiers() {
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<CreateDossierResult | null>(null);
+  const [uploadResult, setUploadResult] = useState<UploadDocumentsResult | null>(null);
 
   // Account creation state
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -376,10 +377,12 @@ function Dossiers() {
     // Start submission
     setIsSubmitting(true);
     setSubmitResult(null);
+    setUploadResult(null);
 
-    console.log('Submitting form data:', { accountData, accountSearchState, step1Data, step2Data });
+    console.log('Submitting form data:', { accountData, accountSearchState, step1Data, step2Data, documentData });
 
     try {
+      // ── Step 1: Create Opportunity + Case ─────────────────────────────────────
       const result = await window.electronAPI.salesforce.createDossier({
         accountId: accountSearchState.accountId,
         opportunityData: {
@@ -403,6 +406,35 @@ function Dossiers() {
 
       console.log('Dossier creation result:', result);
       setSubmitResult(result);
+
+      // ── Step 2: Upload documents (if any and Case was created) ────────────────
+      if (result.success && result.caseId && documentData.files.length > 0) {
+        console.log('Uploading documents to Case:', result.caseId);
+
+        // Wait 2 seconds for OpenText workspace to be ready
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Convert File objects to serializable format
+        const filesForUpload = await Promise.all(
+          documentData.files.map(async (f) => {
+            const arrayBuffer = await f.file.arrayBuffer();
+            return {
+              name: f.name,
+              type: f.type,
+              size: f.size,
+              buffer: Array.from(new Uint8Array(arrayBuffer)),
+            };
+          })
+        );
+
+        const uploadRes = await window.electronAPI.salesforce.uploadDocuments({
+          caseId: result.caseId,
+          files: filesForUpload,
+        });
+
+        console.log('Document upload result:', uploadRes);
+        setUploadResult(uploadRes);
+      }
     } catch (err) {
       console.error('Dossier creation error:', err);
       setSubmitResult({
@@ -539,10 +571,27 @@ function Dossiers() {
 
             {/* Submission Result */}
             {submitResult && (
-              <Card className={`mt-6 pl-1 border ${submitResult.success ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
+              <Card className={`mt-6 pl-1 border ${
+                submitResult.success && (!uploadResult || uploadResult.success)
+                  ? 'border-green-200 dark:border-green-900'
+                  : submitResult.success && uploadResult && !uploadResult.success
+                    ? 'border-amber-200 dark:border-amber-900'
+                    : 'border-red-200 dark:border-red-900'
+              }`}>
                 <CardHeader>
-                  <CardTitle className={submitResult.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
-                    {submitResult.success ? '✅ Dossier créé avec succès' : '❌ Erreur lors de la création'}
+                  <CardTitle className={
+                    submitResult.success && (!uploadResult || uploadResult.success)
+                      ? 'text-green-700 dark:text-green-400'
+                      : submitResult.success && uploadResult && !uploadResult.success
+                        ? 'text-amber-700 dark:text-amber-400'
+                        : 'text-red-700 dark:text-red-400'
+                  }>
+                    {submitResult.success
+                      ? uploadResult && !uploadResult.success
+                        ? '⚠️ Dossier créé (upload partiel)'
+                        : '✅ Dossier créé avec succès'
+                      : '❌ Erreur lors de la création'
+                    }
                   </CardTitle>
                   <CardDescription>
                     {submitResult.success
@@ -552,21 +601,75 @@ function Dossiers() {
                   </CardDescription>
                 </CardHeader>
                 {submitResult.success && (
-                  <CardContent className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-muted-foreground">Opportunity ID:</span>
-                      <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.opportunityId}</code>
-                    </div>
-                    {submitResult.caseId && (
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground">Case ID:</span>
-                        <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.caseId}</code>
+                        <span className="text-sm font-medium text-muted-foreground">Opportunity ID:</span>
+                        <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.opportunityId}</code>
+                      </div>
+                      {submitResult.caseId && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-muted-foreground">Case ID:</span>
+                          <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.caseId}</code>
+                        </div>
+                      )}
+                      {submitResult.warning && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                          ⚠️ {submitResult.warning}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Document Upload Results */}
+                    {uploadResult && (
+                      <div className="pt-4 border-t border-border">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-sm font-medium">📄 Documents:</span>
+                          <span className={`text-sm ${
+                            uploadResult.success
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-amber-600 dark:text-amber-400'
+                          }`}>
+                            {uploadResult.uploadedCount}/{uploadResult.uploadedCount + uploadResult.failedCount} uploadés
+                          </span>
+                        </div>
+
+                        <div className="space-y-1">
+                          {uploadResult.results.map((fileResult, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-2 text-sm"
+                            >
+                              <span className={fileResult.success ? 'text-green-600' : 'text-red-600'}>
+                                {fileResult.success ? '✓' : '✗'}
+                              </span>
+                              <span className={fileResult.success ? 'text-foreground' : 'text-red-600 dark:text-red-400'}>
+                                {fileResult.fileName}
+                              </span>
+                              {fileResult.error && (
+                                <span className="text-xs text-muted-foreground">
+                                  — {fileResult.error}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {uploadResult.error && uploadResult.failedCount > 0 && (
+                          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                            {uploadResult.error}
+                          </p>
+                        )}
                       </div>
                     )}
-                    {submitResult.warning && (
-                      <p className="text-sm text-amber-600 dark:text-amber-400">
-                        ⚠️ {submitResult.warning}
-                      </p>
+
+                    {/* No documents case */}
+                    {!uploadResult && documentData.files.length === 0 && (
+                      <div className="pt-4 border-t border-border">
+                        <p className="text-sm text-muted-foreground">
+                          📄 Aucun document uploadé
+                        </p>
+                      </div>
                     )}
                   </CardContent>
                 )}
@@ -620,6 +723,7 @@ function Dossiers() {
                     setDocumentData(DEFAULT_DOCUMENT_UPLOAD_DATA);
                     setAccountSearchState(null);
                     setSubmitResult(null);
+                    setUploadResult(null);
                   }}
                 >
                   Créer un nouveau dossier
@@ -634,7 +738,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, submitResult }, null, 2)}
+                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, submitResult, uploadResult }, null, 2)}
                 </pre>
               </details>
             )}

@@ -6,14 +6,16 @@ Documentation du processus utilisateur pour la création de dossiers dans cmpDes
 
 ## Vue d'ensemble
 
-Le formulaire de création de dossier suit un **wizard multi-étapes** permettant de créer une **Opportunity** et un **Case** liés dans Salesforce.
+Le formulaire de création de dossier suit un **wizard multi-étapes** permettant de créer une **Opportunity** et un **Case** liés dans Salesforce, puis d'uploader des documents vers **OpenText xECM**.
 
 ```
-┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Étape 1    │────▶│  Recherche      │────▶│  Étape 2        │────▶│  Étape 3        │────▶│  Étape 4        │
-│  Compte     │     │  Compte (auto)  │     │  Opportunity    │     │  Case           │     │  Documents      │
-└─────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Étape 1    │────▶│  Recherche      │────▶│  Étape 2        │────▶│  Étape 3        │────▶│  Soumission      │────▶│  Étape 4        │
+│  Compte     │     │  Compte (auto)  │     │  Opportunity    │     │  Case           │     │  Salesforce      │     │  Documents      │
+└─────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
+
+> **Ordre d'exécution critique** : Salesforce (Opportunity + Case) → obtention du `caseId` → Upload OpenText xECM
 
 ---
 
@@ -131,9 +133,51 @@ Famille de produit
 
 ---
 
-## Étape 4 — Dépôt de documents
+## Soumission Salesforce (inter-étapes 3→4)
 
-**Objectif**: Permettre à l'utilisateur d'ajouter des documents au dossier.
+**Objectif**: Créer les enregistrements Salesforce avant l'upload de documents.
+
+### Séquence d'exécution
+
+```
+Clic "Créer le dossier"
+        │
+        ▼
+1. Créer Opportunity (Aura API)
+        │ → opportunityId
+        ▼
+2. Lier Case à l'Opportunity (Aura API)
+        │ → caseId  ← REQUIS pour xECM
+        ▼
+3. Retourner { success, opportunityId, caseId }
+        │
+        ▼
+4. Naviguer vers Étape 4 (Documents)
+```
+
+### États de soumission Salesforce
+
+| État | UI |
+|------|-----|
+| En cours | Bouton désactivé + spinner |
+| Succès | Affichage des IDs → passage à l'étape 4 |
+| Erreur | Card rouge avec message d'erreur |
+
+### Après succès Salesforce
+
+- **Opportunity ID** et **Case ID** sont disponibles
+- L'étape 4 (documents) s'active avec le `caseId` comme contexte d'upload
+
+---
+
+## Étape 4 — Dépôt de documents (Upload OpenText xECM)
+
+**Objectif**: Uploader les documents du dossier vers OpenText Content Server (xECM) lié au Case Salesforce.
+
+### Prérequis
+
+- `caseId` Salesforce valide (obtenu à l'étape de soumission)
+- Session Salesforce active (browser context Playwright)
 
 ### Interface
 
@@ -147,21 +191,25 @@ Famille de produit
 
 | Type | Extensions |
 |------|------------|
-| Documents | .pdf, .doc, .docx, .txt |
-| Tableurs | .xlsx, .xls |
-| Images | .png, .jpg, .jpeg, .gif, .webp |
+| Documents | `.pdf`, `.doc`, `.docx`, `.txt` |
+| Tableurs | `.xlsx`, `.xls` |
+| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` |
 
 ### Formats bloqués (sécurité)
 
-- Exécutables (.exe, .bat, .cmd, .sh)
-- Scripts (.js, .vbs, .ps1)
-- Archives potentiellement dangereuses (.zip, .rar)
+- Exécutables (`.exe`, `.bat`, `.cmd`, `.sh`)
+- Scripts (`.js`, `.vbs`, `.ps1`)
+- Archives potentiellement dangereuses (`.zip`, `.rar`)
 
-### Comportement
+### Limite de taille
+
+- Maximum **50 MB** par fichier
+
+### Comportement UI
 
 1. L'utilisateur peut glisser-déposer ou cliquer pour parcourir
 2. Les fichiers valides sont ajoutés à la liste
-3. Les fichiers non acceptés affichent un message d'erreur
+3. Les fichiers non acceptés affichent un message d'erreur inline
 4. Chaque fichier peut être supprimé individuellement
 5. Bouton "Tout supprimer" si plusieurs fichiers
 
@@ -173,29 +221,82 @@ Famille de produit
 - Taille (KB/MB)
 - Bouton de suppression
 
----
+### Flux technique d'upload (OpenText xECM)
 
-## Soumission
+```
+Clic "Uploader les documents"
+        │
+        ▼
+1. Acquérir mutex navigateur (BrowserOperationMutex)
+        │
+        ▼
+2. Récupérer credentials Aura (captureAuraCredentials)
+        │  → { token, context, sessionId }
+        ▼
+3. Résoudre workspace xECM via Aura API
+        │  CanvasAppController.getPerspectiveParameters
+        │  → { workspaceNodeId (parentNodeId) }
+        ▼
+4. Obtenir token OTDS via Aura API
+        │  CanvasAppController.getPerspectiveParameters (avec caseId)
+        │  → { otdsToken }
+        ▼
+5. Pour chaque fichier (séquentiel) :
+        │  POST /otcs/cs.exe/api/v2/nodes
+        │  Content-Type: multipart/form-data
+        │  Authorization: Bearer {otdsToken}
+        │  → { success, nodeId, fileName }
+        │
+        │  En cas de 401 → refresh otdsToken → retry automatique
+        ▼
+6. Libérer mutex
+        │
+        ▼
+7. Retourner { uploadedCount, failedCount, results[] }
+```
 
-### Processus
-
-1. Validation finale de tous les champs requis
-2. Création de l'**Opportunity** dans Salesforce (liée au Account)
-3. Création du **Case** (lié à l'Opportunity)
-4. Affichage du résultat
-
-### États de soumission
+### États de l'upload
 
 | État | UI |
 |------|-----|
-| En cours | Bouton désactivé + spinner |
-| Succès | Card verte avec IDs créés |
-| Erreur | Card rouge avec message d'erreur |
+| En cours | Progress par fichier + spinner |
+| Succès partiel | Fichiers uploadés en vert, échoués en rouge |
+| Succès total | Card verte "X document(s) uploadé(s)" |
+| Erreur totale | Card rouge avec message d'erreur |
 
-### Après succès
+### Résultat affiché
 
-- Affichage de l'**Opportunity ID** et **Case ID**
-- Bouton **"Créer un nouveau dossier"** pour recommencer
+```json
+{
+  "uploadedCount": 4,
+  "failedCount": 0,
+  "results": [
+    { "fileName": "contrat.pdf", "success": true, "nodeId": "12345678" },
+    { "fileName": "identite.jpg", "success": true, "nodeId": "12345679" }
+  ]
+}
+```
+
+---
+
+## Résumé du parcours utilisateur
+
+```
+1. Entrer infos client ──────▶ 2. Recherche auto ──────▶ 3. Choisir/Créer compte
+                                                                    │
+                                                                    ▼
+                                                        4. Remplir Opportunity + Case
+                                                                    │
+                                                                    ▼
+                                                        5. Soumission Salesforce
+                                                           → Opportunity ID
+                                                           → Case ID
+                                                                    │
+                                                                    ▼
+8. Résultat final ◀────── 7. Upload xECM ◀────── 6. Déposer documents
+```
+
+**Temps estimé**: 2-4 minutes pour un dossier complet avec documents.
 
 ---
 
@@ -210,13 +311,35 @@ En mode développement (`DEV_MODE=true`):
 
 ---
 
-## Résumé du parcours utilisateur
+## Architecture technique
+
+### IPC Handlers (electron/main.js)
+
+| Handler IPC | Fonction | Description |
+|-------------|----------|-------------|
+| `salesforce:searchAccount` | `searchAccount()` | Recherche par téléphone/email/nom |
+| `salesforce:createAccount` | `createAccount()` | Création compte FSC Individual |
+| `salesforce:createDossier` | `createDossier()` | Création Opportunity + Case |
+| `salesforce:uploadDocuments` | `uploadDocuments()` | Upload vers OpenText xECM ✅ |
+
+### Protection contre les race conditions
+
+Toutes les opérations navigateur sont sérialisées via `BrowserOperationMutex` :
 
 ```
-1. Entrer infos client ──────▶ 2. Recherche auto ──────▶ 3. Choisir/Créer compte
-                                                                    │
-                                                                    ▼
-7. Résultat création ◀────── 6. Soumission ◀────── 5. Documents ◀────── 4. Remplir Opportunity + Case
+searchAccount ──┐
+createAccount ──┤──▶ BrowserOperationMutex (queue) ──▶ Playwright context
+createDossier ──┤
+uploadDocuments─┘
 ```
 
-**Temps estimé**: 2-4 minutes pour un dossier complet.
+> Un seul accès au contexte navigateur à la fois. Les opérations concurrentes sont mises en file d'attente.
+
+### Dépendances système
+
+| Système | Usage |
+|---------|-------|
+| Salesforce Aura API | Création Opportunity, Case, résolution workspace xECM |
+| OpenText OTDS | Authentification token pour l'API v2 |
+| OpenText Content Server REST API v2 | Upload des documents (`POST /api/v2/nodes`) |
+| Playwright (Chromium) | Session persistante, interception des credentials |
