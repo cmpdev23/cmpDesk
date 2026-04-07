@@ -25,10 +25,12 @@ import {
   OpportunityFormStep1,
   OpportunityFormStep2,
   DocumentUploadStep,
+  NotesStep,
   DEFAULT_ACCOUNT_DATA,
   DEFAULT_STEP1_DATA,
   DEFAULT_STEP2_DATA,
   DEFAULT_DOCUMENT_UPLOAD_DATA,
+  DEFAULT_NOTES_DATA,
   DossierPageHeader,
 } from '@/modules/dossiers';
 import type {
@@ -37,6 +39,7 @@ import type {
   OpportunityStep1Data,
   CaseStep2Data,
   DocumentUploadStepData,
+  NotesStepData,
   SearchStepStatus,
 } from '@/modules/dossiers';
 import type { AccountSearchResult, CreateDossierResult, UploadDocumentsResult } from '@/types/electron';
@@ -57,11 +60,12 @@ import { useDevMode } from '@/hooks/use-dev-mode';
  * - 'opportunity': Step 2 - Opportunity details
  * - 'case': Step 3 - Case/Product family details
  * - 'documents': Step 4 - Document upload
+ * - 'notes': Step 5 - Notes
  */
-type FormStep = 'account' | 'search-result' | 'opportunity' | 'case' | 'documents';
+type FormStep = 'account' | 'search-result' | 'opportunity' | 'case' | 'documents' | 'notes';
 
 /**
- * Get display step number for header (1, 2, 3, or 4)
+ * Get display step number for header (1, 2, 3, 4, or 5)
  */
 function getDisplayStep(step: FormStep): number {
   switch (step) {
@@ -74,6 +78,8 @@ function getDisplayStep(step: FormStep): number {
       return 3;
     case 'documents':
       return 4;
+    case 'notes':
+      return 5;
   }
 }
 
@@ -92,6 +98,7 @@ function Dossiers() {
   const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
   const [step2Data, setStep2Data] = useState<CaseStep2Data>(DEFAULT_STEP2_DATA);
   const [documentData, setDocumentData] = useState<DocumentUploadStepData>(DEFAULT_DOCUMENT_UPLOAD_DATA);
+  const [notesData, setNotesData] = useState<NotesStepData>(DEFAULT_NOTES_DATA);
 
   // Account search state
   const [searchStatus, setSearchStatus] = useState<SearchStepStatus>('searching');
@@ -261,6 +268,9 @@ function Dossiers() {
       if (validateStep2()) {
         setCurrentStep('documents');
       }
+    } else if (currentStep === 'documents') {
+      // No validation needed for documents - proceed to notes
+      setCurrentStep('notes');
     }
     // Note: 'search-result' step uses its own buttons, not the main Next button
   };
@@ -275,6 +285,8 @@ function Dossiers() {
       setCurrentStep('opportunity');
     } else if (currentStep === 'documents') {
       setCurrentStep('case');
+    } else if (currentStep === 'notes') {
+      setCurrentStep('documents');
     }
   };
 
@@ -569,6 +581,14 @@ function Dossiers() {
               />
             )}
 
+            {/* Step 5: Notes */}
+            {currentStep === 'notes' && (
+              <NotesStep
+                data={notesData}
+                onChange={setNotesData}
+              />
+            )}
+
             {/* Submission Result */}
             {submitResult && (
               <Card className={`mt-6 pl-1 border ${
@@ -687,7 +707,7 @@ function Dossiers() {
                   ← Précédent
                 </Button>
 
-                {currentStep === 'documents' ? (
+                {currentStep === 'notes' ? (
                   <Button onClick={handleSubmit} disabled={isSubmitting}>
                     {isSubmitting ? (
                       <>
@@ -721,6 +741,7 @@ function Dossiers() {
                     setStep1Data(DEFAULT_STEP1_DATA);
                     setStep2Data(DEFAULT_STEP2_DATA);
                     setDocumentData(DEFAULT_DOCUMENT_UPLOAD_DATA);
+                    setNotesData(DEFAULT_NOTES_DATA);
                     setAccountSearchState(null);
                     setSubmitResult(null);
                     setUploadResult(null);
@@ -738,7 +759,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, submitResult, uploadResult }, null, 2)}
+                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, notesData, submitResult, uploadResult }, null, 2)}
                 </pre>
               </details>
             )}

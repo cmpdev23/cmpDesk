@@ -17,6 +17,8 @@ export { OpportunityFormStep1 } from './components/OpportunityFormStep1';
 export { OpportunityFormStep2 } from './components/OpportunityFormStep2';
 export { DocumentUploadStep, DEFAULT_DOCUMENT_UPLOAD_DATA } from './components/DocumentUploadStep';
 export type { DocumentUploadStepData, UploadedFile } from './components/DocumentUploadStep';
+export { NotesStep, DEFAULT_NOTES_DATA } from './components/NotesStep';
+export type { NotesStepData } from './components/NotesStep';
 export { DossierPageHeader } from './components/DossierPageHeader';
 
 // Types

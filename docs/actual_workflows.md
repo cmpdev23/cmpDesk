@@ -9,10 +9,10 @@ Documentation du processus utilisateur pour la création de dossiers dans cmpDes
 Le formulaire de création de dossier suit un **wizard multi-étapes** permettant de créer une **Opportunity** et un **Case** liés dans Salesforce, puis d'uploader des documents vers **OpenText xECM**.
 
 ```
-┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Étape 1    │────▶│  Recherche      │────▶│  Étape 2        │────▶│  Étape 3        │────▶│  Soumission      │────▶│  Étape 4        │
-│  Compte     │     │  Compte (auto)  │     │  Opportunity    │     │  Case           │     │  Salesforce      │     │  Documents      │
-└─────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘     └──────────────────┘     └─────────────────┘
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│  Étape 1    │────▶│  Recherche      │────▶│  Étape 2        │────▶│  Étape 3        │────▶│  Étape 4        │────▶│  Étape 5        │────▶│  Soumission      │
+│  Compte     │     │  Compte (auto)  │     │  Opportunity    │     │  Case           │     │  Documents      │     │  Notes          │     │  Salesforce      │
+└─────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘     └──────────────────┘
 ```
 
 > **Ordre d'exécution critique** : Salesforce (Opportunity + Case) → obtention du `caseId` → Upload OpenText xECM
@@ -279,6 +279,33 @@ Clic "Uploader les documents"
 
 ---
 
+## Étape 5 — Notes
+
+**Objectif**: Ajouter des notes ou commentaires au dossier.
+
+### Interface
+
+| Élément | Description |
+|---------|-------------|
+| Textarea | Zone de texte libre pour les notes |
+| Compteur de caractères | Affiche le nombre de caractères utilisés |
+| Suggestions | Liste de contenus suggérés |
+
+### Caractéristiques
+
+- **Optionnel** : L'utilisateur peut laisser les notes vides
+- **Limite** : Maximum 5000 caractères
+- **Indicateur visuel** : Couleur ambrée si proche de la limite (>90%)
+
+### Suggestions de contenu
+
+- Instructions spéciales pour le traitement
+- Contexte additionnel sur le client
+- Références à d'autres dossiers
+- Points d'attention particuliers
+
+---
+
 ## Résumé du parcours utilisateur
 
 ```
@@ -288,12 +315,18 @@ Clic "Uploader les documents"
                                                         4. Remplir Opportunity + Case
                                                                     │
                                                                     ▼
-                                                        5. Soumission Salesforce
+                                                        5. Déposer documents
+                                                                    │
+                                                                    ▼
+                                                        6. Ajouter notes (optionnel)
+                                                                    │
+                                                                    ▼
+                                                        7. Soumission Salesforce
                                                            → Opportunity ID
                                                            → Case ID
                                                                     │
                                                                     ▼
-8. Résultat final ◀────── 7. Upload xECM ◀────── 6. Déposer documents
+9. Résultat final ◀────────────────────────── 8. Upload xECM
 ```
 
 **Temps estimé**: 2-4 minutes pour un dossier complet avec documents.

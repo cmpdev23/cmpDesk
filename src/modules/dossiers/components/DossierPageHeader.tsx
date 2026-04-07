@@ -12,6 +12,8 @@ const DOSSIER_STEPS = [
   { title: "Compte" },
   { title: "Informations générales" },
   { title: "Famille de produit" },
+  { title: "Documents" },
+  { title: "Notes" },
 ];
 
 interface DossierPageHeaderProps {

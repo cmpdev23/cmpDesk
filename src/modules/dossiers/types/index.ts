@@ -72,11 +72,20 @@ export interface CaseStep2Data {
 }
 
 /**
+ * Step 5 form data - Notes
+ * Free-text notes for the dossier
+ */
+export interface NotesStepData {
+  notes: string;
+}
+
+/**
  * Full Opportunity form data (all steps combined).
  * Extended as we add more steps.
  */
 export interface OpportunityFormData extends AccountStepData, OpportunityStep1Data, CaseStep2Data {
-  // Future steps can be added here
+  // Notes step data
+  notes: string;
 }
 
 // ─── Default Values ───────────────────────────────────────────────────────────
@@ -105,6 +114,10 @@ export const DEFAULT_STEP2_DATA: CaseStep2Data = {
   signatureType: '',
   productType: '',
   customersPlaceOfResidence: '',
+};
+
+export const DEFAULT_NOTES_DATA: NotesStepData = {
+  notes: '',
 };
 
 // ─── Validation Types ─────────────────────────────────────────────────────────
