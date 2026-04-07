@@ -13,6 +13,7 @@ const { app } = require('electron');
 // ============================================================================
 
 const AUTH_DIR = path.join(__dirname, '..', '..', 'auth');
+const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'logo.png');
 const BROWSER_PROFILE = path.join(AUTH_DIR, 'browser_profile');
 const COOKIES_FILE = path.join(AUTH_DIR, 'cookies.json');
 const SESSION_FILE = path.join(AUTH_DIR, 'session.json');
@@ -53,6 +54,7 @@ const WINDOW_CONFIG = {
   height: 800,
   minWidth: 800,
   minHeight: 600,
+  icon: ICON_PATH,
   webPreferences: {
     preload: path.join(__dirname, '..', 'preload.js'),
     contextIsolation: true,
@@ -81,6 +83,7 @@ module.exports = {
   BROWSER_PROFILE,
   COOKIES_FILE,
   SESSION_FILE,
+  ICON_PATH,
   
   // Environment
   ENV_CONFIG,

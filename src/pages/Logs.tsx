@@ -13,17 +13,17 @@ import type { LogEntry, LogLevel } from '../types/electron';
 // ============================================================================
 
 const LOG_LEVEL_COLORS: Record<LogLevel, string> = {
-  debug: 'text-cyan-400',
-  info: 'text-green-400',
-  warn: 'text-yellow-400',
-  error: 'text-red-400',
+  debug: 'text-chart-1',
+  info:  'text-chart-2',
+  warn:  'text-chart-3',
+  error: 'text-destructive',
 };
 
 const LOG_LEVEL_BG: Record<LogLevel, string> = {
-  debug: 'bg-cyan-500/10',
-  info: 'bg-green-500/10',
-  warn: 'bg-yellow-500/10',
-  error: 'bg-red-500/10',
+  debug: 'bg-chart-1/10',
+  info:  'bg-chart-2/10',
+  warn:  'bg-chart-3/10',
+  error: 'bg-destructive/10',
 };
 
 // ============================================================================
@@ -39,29 +39,29 @@ function LogEntryRow({ entry }: LogEntryRowProps) {
   const timestamp = entry.timestamp.slice(11, 23); // HH:MM:SS.mmm
   
   return (
-    <div 
-      className={`font-mono text-xs border-b border-border/50 ${LOG_LEVEL_BG[entry.level]} hover:bg-surface-light cursor-pointer`}
+    <div
+      className={`font-mono text-xs border-b border-border/50 ${LOG_LEVEL_BG[entry.level]} hover:bg-accent/40 cursor-pointer transition-colors`}
       onClick={() => entry.data && setExpanded(!expanded)}
     >
       <div className="flex items-start gap-2 px-3 py-1.5">
         {/* Timestamp */}
-        <span className="text-text-muted shrink-0 w-24">{timestamp}</span>
+        <span className="text-muted-foreground/60 shrink-0 w-24 tabular-nums">{timestamp}</span>
         
         {/* Level */}
-        <span className={`shrink-0 w-14 uppercase font-semibold ${LOG_LEVEL_COLORS[entry.level]}`}>
+        <span className={`shrink-0 w-14 uppercase font-semibold tracking-wide ${LOG_LEVEL_COLORS[entry.level]}`}>
           {entry.level}
         </span>
         
         {/* Scope */}
-        <span className="shrink-0 w-24 text-text-secondary font-medium">
+        <span className="shrink-0 w-24 text-muted-foreground font-medium">
           [{entry.scope}]
         </span>
         
         {/* Message */}
-        <span className="text-text-primary flex-1 break-all">
+        <span className="text-foreground flex-1 break-all">
           {entry.message}
           {entry.data && (
-            <span className="text-text-muted ml-2">
+            <span className="text-muted-foreground/60 ml-2">
               {expanded ? '▼' : '▶'} data
             </span>
           )}
@@ -70,8 +70,8 @@ function LogEntryRow({ entry }: LogEntryRowProps) {
       
       {/* Expanded data */}
       {expanded && entry.data && (
-        <div className="px-3 py-2 bg-app/50 border-t border-border/30">
-          <pre className="text-text-secondary text-xs whitespace-pre-wrap overflow-auto max-h-48">
+        <div className="px-3 py-2 bg-background/80 border-t border-border/30">
+          <pre className="text-muted-foreground text-xs whitespace-pre-wrap overflow-auto max-h-48">
             {(() => {
               try {
                 return JSON.stringify(JSON.parse(entry.data), null, 2);
@@ -114,14 +114,14 @@ function FilterControls({
   onClear,
 }: FilterControlsProps) {
   return (
-    <div className="flex items-center gap-4 p-3 bg-surface border-b border-border">
+    <div className="flex items-center gap-4 p-3 bg-card border-b border-border">
       {/* Level filter */}
       <div className="flex items-center gap-2">
-        <label className="text-text-secondary text-sm">Level:</label>
+        <label className="text-muted-foreground text-sm">Level:</label>
         <select
           value={levelFilter}
           onChange={(e) => setLevelFilter(e.target.value as LogLevel | 'all')}
-          className="bg-surface-light border border-border rounded px-2 py-1 text-text-primary text-sm"
+          className="bg-muted border border-border rounded px-2 py-1 text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <option value="all">All</option>
           <option value="debug">Debug</option>
@@ -133,25 +133,25 @@ function FilterControls({
       
       {/* Scope filter */}
       <div className="flex items-center gap-2">
-        <label className="text-text-secondary text-sm">Scope:</label>
+        <label className="text-muted-foreground text-sm">Scope:</label>
         <input
           type="text"
           value={scopeFilter}
           onChange={(e) => setScopeFilter(e.target.value.toUpperCase())}
           placeholder="AUTH, API..."
-          className="bg-surface-light border border-border rounded px-2 py-1 text-text-primary text-sm w-24"
+          className="bg-muted border border-border rounded px-2 py-1 text-foreground placeholder:text-muted-foreground/50 text-sm w-24 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       
       {/* Search */}
       <div className="flex items-center gap-2 flex-1">
-        <label className="text-text-secondary text-sm">Search:</label>
+        <label className="text-muted-foreground text-sm">Search:</label>
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Filter messages..."
-          className="bg-surface-light border border-border rounded px-2 py-1 text-text-primary text-sm flex-1 max-w-xs"
+          className="bg-muted border border-border rounded px-2 py-1 text-foreground placeholder:text-muted-foreground/50 text-sm flex-1 max-w-xs focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       
@@ -161,15 +161,15 @@ function FilterControls({
           type="checkbox"
           checked={autoScroll}
           onChange={(e) => setAutoScroll(e.target.checked)}
-          className="rounded"
+          className="rounded accent-primary"
         />
-        <span className="text-text-secondary text-sm">Auto-scroll</span>
+        <span className="text-muted-foreground text-sm">Auto-scroll</span>
       </label>
       
       {/* Clear button */}
       <button
         onClick={onClear}
-        className="px-3 py-1 bg-danger/20 text-danger hover:bg-danger/30 rounded text-sm transition-colors"
+        className="px-3 py-1 bg-destructive/15 text-destructive hover:bg-destructive/25 border border-destructive/30 rounded text-sm transition-colors"
       >
         Clear
       </button>
@@ -189,11 +189,11 @@ interface StatsBarProps {
 
 function StatsBar({ total, filtered, counts }: StatsBarProps) {
   return (
-    <div className="flex items-center gap-4 px-3 py-2 bg-surface/50 border-b border-border text-xs">
-      <span className="text-text-secondary">
-        Showing <span className="text-text-primary font-medium">{filtered}</span> of {total}
+    <div className="flex items-center gap-4 px-3 py-2 bg-card/60 border-b border-border text-xs">
+      <span className="text-muted-foreground">
+        Showing <span className="text-foreground font-medium">{filtered}</span> of {total}
       </span>
-      <span className="text-text-muted">|</span>
+      <span className="text-muted-foreground/40">|</span>
       <span className={`${LOG_LEVEL_COLORS.debug}`}>Debug: {counts.debug}</span>
       <span className={`${LOG_LEVEL_COLORS.info}`}>Info: {counts.info}</span>
       <span className={`${LOG_LEVEL_COLORS.warn}`}>Warn: {counts.warn}</span>
@@ -287,11 +287,11 @@ export default function Logs() {
   };
   
   return (
-    <div className="h-full flex flex-col bg-app">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border">
-        <h1 className="text-xl font-bold text-text-primary">Debug Logs</h1>
-        <p className="text-sm text-text-secondary mt-1">
+      <div className="px-4 py-3 border-b border-border bg-card">
+        <h1 className="text-xl font-bold text-foreground">Debug Logs</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Real-time logs from main process. Only visible in DEV mode.
         </p>
       </div>
@@ -313,12 +313,12 @@ export default function Logs() {
       <StatsBar total={logs.length} filtered={filteredLogs.length} counts={counts} />
       
       {/* Logs container */}
-      <div 
+      <div
         ref={logsContainerRef}
-        className="flex-1 overflow-auto bg-app"
+        className="flex-1 overflow-auto bg-background"
       >
         {filteredLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-text-muted">
+          <div className="flex items-center justify-center h-full text-muted-foreground/60">
             {logs.length === 0 
               ? 'No logs yet. Logs will appear here in real-time.'
               : 'No logs match the current filters.'
