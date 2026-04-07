@@ -295,10 +295,188 @@ const result = await window.electronAPI.salesforce.uploadDocuments({
 ## 📋 Active TODOs
 
 - [x] ~~Create `lib/upload_document.js` stable function for main.js integration~~ (Done: `electron/services/salesforce/upload.js`)
-- [ ] Create `lib/create_note.js` integration into main.js
+- [x] ~~Create `lib/create_note.js` integration into main.js~~ (Done: 2026-04-07)
 - [ ] Test refactored Electron structure (`main.refactored.js` → `main.js`)
-- [ ] Add note creation step to Dossiers workflow
+- [x] ~~Add note creation step to Dossiers workflow~~ (Done: 2026-04-07)
 - [x] ~~Add document upload step to Dossiers workflow~~ (Done: integrated in handleSubmit)
+
+---
+
+## 🔧 Bugfix — Aura Credential Capture (2026-04-07)
+
+### Problem
+
+When calling `captureAuraCredentials()` on an already-loaded Lightning page, network interception would timeout because no new Aura requests were being made.
+
+### Root Cause
+
+The function relied on intercepting POST requests to `/aura` endpoint. However:
+- If the page was already fully loaded and stable
+- And no UI interactions triggered new Aura requests
+- The timeout would expire with `null` result
+
+### Solution
+
+Implemented a **two-stage credential capture** approach:
+
+1. **Primary Method**: Network interception with multiple UI triggers
+   - Wait 2s for page to stabilize
+   - Try clicking search bar, Related/Details tabs, buttons
+   - Try mouse hover movements
+   - Timeout after 8s (reduced from 15s)
+
+2. **Fallback Method**: Direct extraction from `$A.getContext()`
+   - Use `ctx.encodeForServer()` to get properly serialized context
+   - Search for fwuid patterns in obfuscated properties
+   - Return structured context object
+
+### Implementation
+
+```javascript
+// Primary: Network interception with triggers
+let credentials = await captureAuraCredentials(page, 8000);
+
+// Fallback: Direct extraction
+if (!credentials) {
+  credentials = await extractAuraCredentialsFromContext(page);
+}
+
+if (!credentials) {
+  // Both methods failed
+  return { error: 'Could not capture Aura credentials' };
+}
+```
+
+### Key Insight
+
+**Network interception is unreliable on stable pages.** Always have a fallback that extracts from the `$A` context, even though it's obfuscated in production. The `encodeForServer()` method is the proper way to serialize the context.
+
+### Files Modified
+
+- `electron/main.js` — Added `extractAuraCredentialsFromContext()`, improved `captureAuraCredentials()` with better logging
+
+---
+
+## 🔧 Bugfix — ContentNote ID Extraction (2026-04-07)
+
+### Problem
+
+After creating a ContentNote via `RecordGvpController/saveRecord`, the response parsing failed with:
+```
+Note created but ID not returned
+```
+
+Yet the API call succeeded (state: SUCCESS).
+
+### Root Cause
+
+The response format from Salesforce Aura API can vary:
+- Sometimes: `{ id: "069..." }`
+- Sometimes: Direct string ID
+- Sometimes: `{ record: { id: "..." } }`
+- Sometimes: `{ recordId: "..." }`
+- Sometimes: ID buried in other fields
+
+The original code only checked `action.returnValue?.id` and `action.returnValue?.record?.id`.
+
+### Solution
+
+Implemented **multi-format ID extraction**:
+
+```javascript
+let noteId = null;
+const rv = action.returnValue;
+
+// Format 1: { id: "..." }
+if (rv?.id) noteId = rv.id;
+// Format 2: Direct string ID
+else if (typeof rv === 'string' && rv.startsWith('069')) noteId = rv;
+// Format 3: { record: { id: "..." } }
+else if (rv?.record?.id) noteId = rv.record.id;
+// Format 4: { recordId: "..." }
+else if (rv?.recordId) noteId = rv.recordId;
+// Format 5: Search all fields for ContentNote ID pattern
+else if (rv) {
+  for (const key of Object.keys(rv)) {
+    const val = rv[key];
+    if (typeof val === 'string' && val.startsWith('069')) {
+      noteId = val;
+      break;
+    }
+  }
+}
+
+// If still not found, return debug info
+if (!noteId) {
+  return {
+    success: false,
+    error: 'Note created but ID not found in response',
+    debug: {
+      state: action.state,
+      returnValueKeys: rv ? Object.keys(rv) : null,
+      returnValueSample: JSON.stringify(rv).substring(0, 200)
+    }
+  };
+}
+```
+
+### Key Insight
+
+**Salesforce API responses are inconsistent.** Always:
+1. Check multiple possible formats
+2. Log the actual response structure for debugging
+3. Return debug info when parsing fails
+
+### Files Modified
+
+- `electron/main.js` — Enhanced ID extraction logic in `createNote()` function
+
+---
+
+## 📚 Note Creation Workflow (2026-04-07)
+
+### Complete Flow
+
+```
+User fills Dossiers form
+    ↓
+Step 1: Create Opportunity (via API)
+    ↓
+Step 2: Upload Documents (via OpenText xECM)
+    ↓
+Step 3: Create Note (NEW - 2026-04-07)
+    ├─ Navigate to Case page
+    ├─ Wait 5s for Lightning context
+    ├─ Get current user ID (6 fallback methods)
+    ├─ Prepare note content (HTML escape + Base64)
+    ├─ Create ContentNote (RecordGvpController)
+    ├─ Extract ContentNote ID (multi-format parsing)
+    ├─ Link to Case (EditPanelController)
+    └─ Return success/error
+    ↓
+Display results to user
+```
+
+### Critical Timing
+
+- **After navigation**: Wait 5s before calling `getUserId()` — Lightning globals not available immediately
+- **Before credential capture**: Wait 2s for page to stabilize
+- **Between API calls**: No explicit wait needed (sequential execution)
+
+### Non-Blocking Failures
+
+Note creation is **non-blocking**:
+- If note creation fails, the dossier is still created
+- Error is logged as warning, not error
+- User sees the dossier was created, with note creation status
+
+### Files Modified
+
+- `electron/main.js` — Added `createNote()`, `getUserId()`, `prepareNoteContent()` functions
+- `electron/preload.js` — Exposed `createNote` API
+- `src/types/electron.d.ts` — Added TypeScript types
+- `src/pages/Dossiers.tsx` — Integrated note creation into workflow
+- `docs/sf_discovery/notes.md` — Documented implementation
 
 ---
 

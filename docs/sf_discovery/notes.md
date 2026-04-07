@@ -10,6 +10,141 @@ La création d'une Note liée à un Case nécessite **deux appels API** :
 
 ---
 
+## ✅ Implémentation cmpDesk (2026-04-07)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         RENDERER PROCESS                        │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ NotesStep.tsx (React Component)                          │   │
+│  │ - Form fields (title, content)                           │   │
+│  │ - Submit button                                          │   │
+│  │ - Result indicator (success/error)                       │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                    │                                            │
+│                    │ window.electronAPI.salesforce.createNote() │
+│                    ▼                                            │
+└─────────────────────────────────────────────────────────────────┘
+                      │ IPC
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                          MAIN PROCESS                           │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ ipcMain.handle('salesforce:createNote')                  │   │
+│  │ → createNote({ caseId, title, content })                 │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                    │                                            │
+│                    ▼                                            │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ Aura API via Playwright                                  │   │
+│  │ 1. Launch browser with persistent context                │   │
+│  │ 2. Navigate to Case page                                 │   │
+│  │ 3. Capture Aura credentials (fwuid + token)              │   │
+│  │ 4. Step 1: Create ContentNote via RecordGvpController    │   │
+│  │ 5. Step 2: Link to Case via EditPanelController          │   │
+│  │ 6. Extract ContentNote ID from response                  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Files Created/Modified
+
+| File | Type | Description |
+|------|------|-------------|
+| `electron/main.js` | Modified | Added `createNote()`, `getUserId()`, `prepareNoteContent()`, `captureAuraCredentials()`, `extractAuraCredentialsFromContext()` functions + IPC handler |
+| `electron/preload.js` | Modified | Added `salesforceAPI.createNote()` |
+| `src/types/electron.d.ts` | Modified | Added `CreateNoteParams`, `CreateNoteResult`, `SalesforceAPI.createNote()` |
+| `src/pages/Dossiers.tsx` | Modified | Added `noteResult` state, integrated note creation into submission workflow |
+
+### Key Implementation Details
+
+#### 1. Credential Capture (Improved 2026-04-07)
+
+Two-stage approach:
+- **Primary**: Network interception via `captureAuraCredentials()` with UI trigger mechanisms
+- **Fallback**: Direct extraction from `$A.getContext()` via `extractAuraCredentialsFromContext()`
+
+Trigger mechanisms:
+- Click search bar
+- Click Related/Details tabs
+- Click visible buttons
+- Mouse hover movements
+
+#### 2. User ID Extraction
+
+Multiple fallback methods:
+1. `$A.get("$SObjectType.CurrentUser.Id")` — Aura GVP
+2. `window.UserContext.userId` — Lightning Experience context
+3. `window.$User.id` — Global context
+4. `$A.getContext().getGlobal("$User")` — Aura context global
+5. Parse `<script>` tags for userId pattern
+6. Direct GVP access via `$A.getContext().getGlobalValueProviders()`
+
+#### 3. Content Encoding
+
+HTML content is escaped and encoded to Base64:
+- Escape HTML special characters (`<`, `>`, `&`, `"`, `'`)
+- Wrap in `<p>` tags
+- Convert newlines to paragraph breaks
+- Encode to Base64
+
+#### 4. Response Parsing (Fixed 2026-04-07)
+
+Handles multiple response formats:
+- `{ id: "..." }` — Direct ID
+- Direct string ID starting with `069` (ContentNote prefix)
+- `{ record: { id: "..." } }` — Nested record
+- `{ recordId: "..." }` — Alternative field name
+- Searches all fields for ContentNote ID patterns
+
+### Usage
+
+```typescript
+// From renderer process
+const result = await window.electronAPI.salesforce.createNote({
+  caseId: "500JQ00000xut34YAA",
+  title: "Client Notes",
+  content: "Important information about the client..."
+});
+
+if (result.success) {
+  console.log("Note created:", result.noteId);
+} else {
+  console.error("Note creation failed:", result.error);
+}
+```
+
+### Workflow Integration
+
+In `Dossiers.tsx` `handleSubmit()`:
+
+1. Create Opportunity (Step 1)
+2. Create Case (auto-created by SF trigger)
+3. Upload Documents (Step 2)
+4. **Create Note (Step 3)** ← NEW
+   - Only if Case exists and notes content is non-empty
+   - Non-blocking failure (warning instead of error)
+   - Result displayed in UI
+
+### Error Handling
+
+- **Credential capture failure** → Detailed debug logs showing what was tried
+- **User ID extraction failure** → Multiple fallback methods logged
+- **Note creation failure** → Response structure logged for debugging
+- **Note linking failure** → Non-blocking warning (note created but not linked)
+
+### Testing
+
+Tested with:
+- Case ID: `500JQ00000xut34YAA`
+- Title: "Test Note"
+- Content: "This is a test note"
+- Result: ✅ Note created and linked successfully
+
+---
+
 ## API — Création de ContentNote
 
 ### Descriptor

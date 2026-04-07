@@ -2551,9 +2551,49 @@ async function createNote({ caseId, title, content }) {
                   return { success: false, error: errorMsg };
                 }
                 
-                // Extract note ID from response
-                const noteId = action.returnValue?.id || action.returnValue?.record?.id;
-                if (!noteId) return { success: false, error: 'Note created but ID not returned' };
+                // Extract note ID from response - multiple possible formats
+                let noteId = null;
+                const rv = action.returnValue;
+                
+                // Format 1: { id: "..." }
+                if (rv?.id) {
+                  noteId = rv.id;
+                }
+                // Format 2: Direct string ID
+                else if (typeof rv === 'string' && rv.startsWith('069')) {
+                  noteId = rv;
+                }
+                // Format 3: { record: { id: "..." } }
+                else if (rv?.record?.id) {
+                  noteId = rv.record.id;
+                }
+                // Format 4: { recordId: "..." }
+                else if (rv?.recordId) {
+                  noteId = rv.recordId;
+                }
+                // Format 5: Search for any field that looks like a ContentNote ID
+                else if (rv) {
+                  for (const key of Object.keys(rv)) {
+                    const val = rv[key];
+                    if (typeof val === 'string' && val.startsWith('069')) {
+                      noteId = val;
+                      break;
+                    }
+                  }
+                }
+                
+                if (!noteId) {
+                  // Return full response for debugging
+                  return {
+                    success: false,
+                    error: 'Note created but ID not found in response',
+                    debug: {
+                      state: action.state,
+                      returnValueKeys: rv ? Object.keys(rv) : null,
+                      returnValueSample: JSON.stringify(rv).substring(0, 200)
+                    }
+                  };
+                }
                 
                 return { success: true, noteId };
               }
@@ -2572,7 +2612,10 @@ async function createNote({ caseId, title, content }) {
       });
       
       if (!createNoteResult.success) {
-        log.error('NOTE', 'ContentNote creation failed', { error: createNoteResult.error });
+        log.error('NOTE', 'ContentNote creation failed', {
+          error: createNoteResult.error,
+          debug: createNoteResult.debug
+        });
         result.error = `Failed to create note: ${createNoteResult.error}`;
         await saveCookies(context);
         await context.close();
