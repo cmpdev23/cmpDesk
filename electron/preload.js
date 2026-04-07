@@ -246,6 +246,25 @@ const salesforceAPI = {
    * }>}
    */
   uploadDocuments: (params) => ipcRenderer.invoke('salesforce:uploadDocuments', params),
+  
+  /**
+   * Create a Note (ContentNote) linked to a Case.
+   *
+   * Notes are created as ContentNote objects and linked via ContentDocumentLink.
+   * This is optional - if content is empty, should not be called.
+   *
+   * @param {Object} params
+   * @param {string} params.caseId - Salesforce Case ID (required)
+   * @param {string} params.title - Note title (optional, defaults to "Note")
+   * @param {string} params.content - Plain text content (will be converted to HTML/Base64)
+   * @returns {Promise<{
+   *   success: boolean,
+   *   noteId?: string,
+   *   error?: string,
+   *   warning?: string
+   * }>}
+   */
+  createNote: (params) => ipcRenderer.invoke('salesforce:createNote', params),
 };
 
 // ============================================================================
@@ -263,5 +282,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 console.log('🚀 cmpDesk preload script loaded');
 console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
-console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier, uploadDocuments}');
+console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier, uploadDocuments, createNote}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');

@@ -2288,18 +2288,443 @@ async function uploadDocuments({ caseId, files }) {
   }, { retries: 1 });
 }
 
+// ============================================================================
+// CREATE NOTE (ContentNote linked to Case)
+// ============================================================================
+
+/**
+ * API Descriptors for Note creation
+ */
+const DESCRIPTOR_CREATE_NOTE =
+  'serviceComponent://ui.force.components.controllers.recordGlobalValueProvider.RecordGvpController/ACTION$saveRecord';
+
+const DESCRIPTOR_LINK_NOTE =
+  'serviceComponent://ui.notes.components.aura.components.editPanel.EditPanelController/ACTION$serverCreateUpdate';
+
+/**
+ * Extract current user ID from Salesforce Lightning context.
+ * Tries multiple methods to find the user ID.
+ *
+ * @param {Page} page - Playwright page with Lightning loaded
+ * @returns {Promise<string|null>} User ID (18 chars) or null if not found
+ */
+async function getUserId(page) {
+  return await safeEvaluate(page, () => {
+    // Method 1: UserContext (most reliable in Lightning)
+    if (window.UserContext?.userId) {
+      return window.UserContext.userId;
+    }
+    
+    // Method 2: $A.get (Aura GVP)
+    if (typeof $A !== 'undefined' && $A.get) {
+      const uid = $A.get('$SObjectType.CurrentUser.Id');
+      if (uid) return uid;
+    }
+    
+    // Method 3: $User global
+    if (window.$User?.id) {
+      return window.$User.id;
+    }
+    
+    // Method 4: Script tag parsing (fallback)
+    const scripts = document.querySelectorAll('script');
+    for (const script of scripts) {
+      const match = script.textContent?.match(/"userId"\s*:\s*"(005[a-zA-Z0-9]{15})"/);
+      if (match) return match[1];
+    }
+    
+    return null;
+  }, { retries: 2 });
+}
+
+/**
+ * Prepare note content: escape HTML and encode to Base64.
+ *
+ * @param {string} plainText - Plain text content from textarea
+ * @returns {string} Base64 encoded HTML content
+ */
+function prepareNoteContent(plainText) {
+  // Escape HTML special characters
+  const escaped = plainText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+  
+  // Wrap in paragraphs (convert newlines to paragraph breaks)
+  const html = `<p>${escaped.replace(/\n/g, '</p><p>')}</p>`;
+  
+  // Encode to Base64
+  return Buffer.from(html, 'utf-8').toString('base64');
+}
+
+/**
+ * Create a Note (ContentNote) and link it to a Case in Salesforce.
+ *
+ * Process:
+ * 1. Get current user ID (required for OwnerId)
+ * 2. Create ContentNote via RecordGvpController/saveRecord
+ * 3. Link to Case via EditPanelController/serverCreateUpdate
+ *
+ * @param {Object} params - Note parameters
+ * @param {string} params.caseId - Salesforce Case ID to link the note to
+ * @param {string} params.title - Note title
+ * @param {string} params.content - Plain text content (will be converted to HTML/Base64)
+ * @returns {Promise<{ success: boolean, noteId?: string, error?: string }>}
+ */
+async function createNote({ caseId, title, content }) {
+  log.info('NOTE', 'Starting note creation', { caseId, titleLength: title?.length, contentLength: content?.length });
+  
+  // Validation before acquiring mutex
+  if (!caseId) {
+    return { success: false, noteId: null, error: 'caseId is required' };
+  }
+  if (!content || content.trim().length === 0) {
+    return { success: false, noteId: null, error: 'content is required' };
+  }
+  
+  // Use mutex to prevent concurrent browser operations
+  return withBrowserMutex('createNote', async () => {
+    const result = {
+      success: false,
+      noteId: null,
+      error: null,
+    };
+    
+    const auth = await getAuthModule();
+    const { chromium, restoreCookies, saveCookies, BROWSER_PROFILE } = auth;
+    
+    let context;
+    try {
+      // Launch browser with persistent context
+      context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+        headless: false,
+        viewport: { width: 1280, height: 900 },
+        args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+      });
+      
+      await restoreCookies(context);
+      const page = context.pages()[0] || await context.newPage();
+      
+      // Navigate to Case page to ensure Lightning context is loaded
+      const caseUrl = `https://indall.lightning.force.com/lightning/r/Case/${caseId}/view`;
+      log.debug('NOTE', `Navigating to Case: ${caseUrl}`);
+      await page.goto(caseUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      
+      // Wait for Salesforce to be fully loaded
+      await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 15000 });
+      
+      // Check if Aura is available
+      let auraAvailable = await safeEvaluate(
+        page,
+        "typeof $A !== 'undefined' && typeof $A.getContext === 'function'"
+      ).catch(() => false);
+      
+      if (!auraAvailable) {
+        log.warn('NOTE', 'Aura not available - waiting for authentication...');
+        const authenticated = await waitForAuraAuthentication(page);
+        
+        if (!authenticated) {
+          result.error = 'Authentication timeout';
+          await context.close();
+          return result;
+        }
+        
+        // Re-navigate to Case page after auth
+        await page.goto(caseUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await waitForSalesforceReady(page, { waitForAura: true, timeoutMs: 15000 });
+      }
+      
+      // Capture Aura credentials - try network interception first, then fallback to $A context
+      log.debug('NOTE', 'Capturing Aura credentials...');
+      let credentials = await captureAuraCredentials(page, 8000); // Shorter timeout
+      
+      if (!credentials) {
+        log.debug('NOTE', 'Network interception failed, trying $A context extraction...');
+        credentials = await extractAuraCredentialsFromContext(page);
+      }
+      
+      if (!credentials) {
+        result.error = 'Could not capture Aura credentials';
+        log.error('NOTE', 'All credential extraction methods failed');
+        await context.close();
+        return result;
+      }
+      
+      log.debug('NOTE', 'Aura credentials obtained successfully');
+      
+      // Get current user ID (required for OwnerId)
+      log.debug('NOTE', 'Getting current user ID...');
+      const userId = await getUserId(page);
+      if (!userId) {
+        result.error = 'Could not get current user ID';
+        log.error('NOTE', 'Failed to get user ID from Lightning context');
+        await context.close();
+        return result;
+      }
+      log.debug('NOTE', `User ID obtained: ${userId.substring(0, 10)}...`);
+      
+      // Prepare content
+      const noteTitle = title || 'Note';
+      const base64Content = prepareNoteContent(content);
+      
+      // ── Step 1: Create ContentNote ─────────────────────────────────────────
+      log.info('NOTE', 'Step 1: Creating ContentNote...');
+      
+      const createNoteResult = await page.evaluate(async ({ credentials, title, base64Content, userId, descriptor }) => {
+        const message = {
+          actions: [{
+            id: '1;a',
+            descriptor: descriptor,
+            callingDescriptor: 'UNKNOWN',
+            params: {
+              recordRep: {
+                id: null,
+                apiName: 'ContentNote',
+                fields: {
+                  Id: { value: null },
+                  Title: { value: title },
+                  Content: { value: base64Content },
+                  OwnerId: { value: userId },
+                  SharingPrivacy: { value: 'N' }, // N = Normal, P = Private
+                },
+                recordTypeInfo: null,
+              },
+              recordSaveParams: {
+                bypassAsyncSave: true,
+              },
+            },
+          }],
+        };
+        
+        const body = new URLSearchParams();
+        body.append('message', JSON.stringify(message));
+        body.append('aura.context', JSON.stringify(credentials.context));
+        body.append('aura.token', credentials.token || 'undefined');
+        
+        const qp = new URLSearchParams({
+          'ui.force.components.controllers.recordGlobalValueProvider.RecordGvpController.saveRecord': '1',
+          'r': '1',
+        });
+        
+        try {
+          const response = await fetch('/aura?' + qp.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString(),
+            credentials: 'include',
+          });
+          
+          if (!response.ok) {
+            return { success: false, error: `HTTP ${response.status}` };
+          }
+          
+          const rawText = await response.text();
+          const firstBrace = rawText.indexOf('{');
+          if (firstBrace === -1) return { success: false, error: 'No JSON in response' };
+          
+          // Parse JSON response
+          let depth = 0, inString = false, escape = false, start = -1;
+          for (let i = firstBrace; i < rawText.length; i++) {
+            const ch = rawText[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\' && inString) { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') { if (depth === 0) start = i; depth++; }
+            else if (ch === '}') {
+              depth--;
+              if (depth === 0 && start !== -1) {
+                const jsonStr = rawText.substring(start, i + 1);
+                const data = JSON.parse(jsonStr);
+                
+                const actions = data.actions || [];
+                if (actions.length === 0) return { success: false, error: 'No actions in response' };
+                
+                const action = actions[0];
+                if (action.state !== 'SUCCESS') {
+                  const errors = action.error || [];
+                  const errorMsg = errors.length > 0
+                    ? (errors[0].message || errors[0].exceptionMessage || JSON.stringify(errors[0]))
+                    : `State: ${action.state}`;
+                  return { success: false, error: errorMsg };
+                }
+                
+                // Extract note ID from response
+                const noteId = action.returnValue?.id || action.returnValue?.record?.id;
+                if (!noteId) return { success: false, error: 'Note created but ID not returned' };
+                
+                return { success: true, noteId };
+              }
+            }
+          }
+          return { success: false, error: 'Could not parse response' };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      }, {
+        credentials,
+        title: noteTitle,
+        base64Content,
+        userId,
+        descriptor: DESCRIPTOR_CREATE_NOTE,
+      });
+      
+      if (!createNoteResult.success) {
+        log.error('NOTE', 'ContentNote creation failed', { error: createNoteResult.error });
+        result.error = `Failed to create note: ${createNoteResult.error}`;
+        await saveCookies(context);
+        await context.close();
+        return result;
+      }
+      
+      const noteId = createNoteResult.noteId;
+      log.info('NOTE', `ContentNote created: ${noteId}`);
+      
+      // ── Step 2: Link Note to Case ──────────────────────────────────────────
+      log.info('NOTE', 'Step 2: Linking note to Case...');
+      
+      const linkResult = await page.evaluate(async ({ credentials, noteId, caseId, descriptor }) => {
+        const message = {
+          actions: [{
+            id: '1;a',
+            descriptor: descriptor,
+            callingDescriptor: 'UNKNOWN',
+            params: {
+              noteId: noteId,
+              title: '',
+              textContent: '',
+              richTextContent: '',
+              noteChanged: false,
+              relatedIdsChanged: true,
+              relatedIds: [caseId],
+            },
+          }],
+        };
+        
+        const body = new URLSearchParams();
+        body.append('message', JSON.stringify(message));
+        body.append('aura.context', JSON.stringify(credentials.context));
+        body.append('aura.token', credentials.token || 'undefined');
+        
+        const qp = new URLSearchParams({
+          'ui.notes.components.aura.components.editPanel.EditPanelController.serverCreateUpdate': '1',
+          'r': '1',
+        });
+        
+        try {
+          const response = await fetch('/aura?' + qp.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString(),
+            credentials: 'include',
+          });
+          
+          if (!response.ok) {
+            return { success: false, error: `HTTP ${response.status}` };
+          }
+          
+          const rawText = await response.text();
+          const firstBrace = rawText.indexOf('{');
+          if (firstBrace === -1) return { success: false, error: 'No JSON in response' };
+          
+          // Parse JSON response
+          let depth = 0, inString = false, escape = false, start = -1;
+          for (let i = firstBrace; i < rawText.length; i++) {
+            const ch = rawText[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\' && inString) { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') { if (depth === 0) start = i; depth++; }
+            else if (ch === '}') {
+              depth--;
+              if (depth === 0 && start !== -1) {
+                const jsonStr = rawText.substring(start, i + 1);
+                const data = JSON.parse(jsonStr);
+                
+                const actions = data.actions || [];
+                if (actions.length === 0) return { success: false, error: 'No actions in response' };
+                
+                const action = actions[0];
+                if (action.state !== 'SUCCESS') {
+                  const errors = action.error || [];
+                  const errorMsg = errors.length > 0
+                    ? (errors[0].message || errors[0].exceptionMessage || JSON.stringify(errors[0]))
+                    : `State: ${action.state}`;
+                  return { success: false, error: errorMsg };
+                }
+                
+                return { success: true };
+              }
+            }
+          }
+          return { success: false, error: 'Could not parse response' };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      }, {
+        credentials,
+        noteId,
+        caseId,
+        descriptor: DESCRIPTOR_LINK_NOTE,
+      });
+      
+      if (!linkResult.success) {
+        log.warn('NOTE', 'Note linking failed - note created but not linked', {
+          noteId,
+          error: linkResult.error
+        });
+        // Return partial success - note exists but not linked
+        result.success = true; // Partial success
+        result.noteId = noteId;
+        result.warning = `Note created (${noteId}) but linking failed: ${linkResult.error}`;
+        await saveCookies(context);
+        await context.close();
+        return result;
+      }
+      
+      log.info('NOTE', 'Note created and linked successfully', { noteId, caseId });
+      result.success = true;
+      result.noteId = noteId;
+      
+      await saveCookies(context);
+      await context.close();
+      return result;
+      
+    } catch (e) {
+      log.error('NOTE', 'Note creation error', e);
+      if (context) await context.close().catch(() => {});
+      result.error = e.message;
+      return result;
+    }
+  }, { retries: 1 });
+}
+
 /**
  * Capture Aura credentials from page requests.
+ * This requires triggering a UI action to force an Aura request.
  */
 async function captureAuraCredentials(page, timeout = 15000) {
+  log.debug('AURA', `Starting credential capture (timeout: ${timeout}ms)`);
+  
   return new Promise(async (resolve) => {
     let resolved = false;
+    let requestCount = 0;
     
     const handler = (request) => {
       if (resolved) return;
+      
+      // Only log Aura requests
       if (request.url().includes('/aura') && request.method() === 'POST') {
+        requestCount++;
         const postData = request.postData();
-        if (!postData) return;
+        
+        if (!postData) {
+          log.debug('AURA', `Request ${requestCount} has no POST data`);
+          return;
+        }
         
         try {
           const params = new URLSearchParams(postData);
@@ -2309,44 +2734,239 @@ async function captureAuraCredentials(page, timeout = 15000) {
           if (contextStr) {
             const context = JSON.parse(contextStr);
             if (context.fwuid) {
+              log.debug('AURA', `Captured credentials from request ${requestCount}`, {
+                fwuid: context.fwuid.substring(0, 25) + '...',
+                hasToken: !!(token && token !== 'undefined')
+              });
+              
               resolved = true;
               page.off('request', handler);
               resolve({
                 context,
                 token: (token && token !== 'undefined') ? token : null,
               });
+            } else {
+              log.debug('AURA', `Request ${requestCount}: context found but no fwuid`);
             }
+          } else {
+            log.debug('AURA', `Request ${requestCount}: no aura.context in body`);
           }
         } catch (e) {
-          // Ignore parse errors
+          log.debug('AURA', `Request ${requestCount}: parse error - ${e.message}`);
         }
       }
     };
     
     page.on('request', handler);
     
-    // Trigger an action to force Aura request
+    // Wait for initial page activity
+    log.debug('AURA', 'Waiting 2s for page to stabilize...');
     await page.waitForTimeout(2000);
+    
+    // Try multiple UI triggers to force Aura requests
     if (!resolved) {
-      try {
-        const searchBar = await page.$('input[type="search"], button[title="Search"], .search-button');
-        if (searchBar) {
-          await searchBar.click({ timeout: 2000 }).catch(() => {});
+      log.debug('AURA', 'Attempting to trigger Aura request via UI interactions...');
+      
+      const triggerSelectors = [
+        // Global search
+        'input[type="search"]',
+        'button[title="Search"]',
+        '.search-button',
+        // Navigation tabs - clicking these often triggers Aura
+        'a[data-label="Related"]',
+        'a[data-label="Details"]',
+        // Any clickable element that might trigger Aura
+        '.slds-button',
+        '.forceActionsContainer button',
+        // Tab headers
+        '.tabHeader',
+        'lightning-tabset lightning-tab-bar'
+      ];
+      
+      for (const selector of triggerSelectors) {
+        if (resolved) break;
+        
+        try {
+          const element = await page.$(selector);
+          if (element) {
+            log.debug('AURA', `Clicking element: ${selector}`);
+            await element.click({ timeout: 1000 }).catch(() => {});
+            await page.waitForTimeout(500);
+            
+            if (resolved) {
+              log.debug('AURA', `Credential captured after clicking: ${selector}`);
+              break;
+            }
+          }
+        } catch (e) {
+          // Ignore click errors
         }
+      }
+    }
+    
+    // If still not resolved, try hovering over elements (some trigger on hover)
+    if (!resolved) {
+      log.debug('AURA', 'Trying hover interactions...');
+      try {
+        await page.mouse.move(500, 300);
+        await page.waitForTimeout(300);
+        await page.mouse.move(600, 400);
+        await page.waitForTimeout(300);
       } catch (e) {
         // Ignore
       }
     }
     
     // Timeout
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       if (!resolved) {
+        log.warn('AURA', `Credential capture timeout after ${timeout}ms (${requestCount} requests intercepted)`);
         resolved = true;
         page.off('request', handler);
         resolve(null);
       }
     }, timeout);
+    
+    // Wait for remaining time if not yet resolved
+    if (!resolved) {
+      const remainingTime = timeout - 2500; // Already waited 2s + trigger time
+      if (remainingTime > 0) {
+        await page.waitForTimeout(remainingTime).catch(() => {});
+      }
+    }
+    
+    clearTimeout(timeoutId);
   });
+}
+
+/**
+ * Extract Aura credentials directly from $A context (fallback method).
+ * Uses encodeForServer() to get the properly serialized context with fwuid.
+ */
+async function extractAuraCredentialsFromContext(page) {
+  log.debug('AURA', 'Attempting to extract credentials from $A context...');
+  
+  try {
+    const credentials = await safeEvaluate(page, `
+      (function() {
+        const debug = { methods: [], errors: [] };
+        
+        if (typeof $A === 'undefined') {
+          debug.errors.push('$A is undefined');
+          return { success: false, debug };
+        }
+        
+        if (typeof $A.getContext !== 'function') {
+          debug.errors.push('$A.getContext is not a function');
+          return { success: false, debug };
+        }
+        
+        const ctx = $A.getContext();
+        if (!ctx) {
+          debug.errors.push('$A.getContext() returned null');
+          return { success: false, debug };
+        }
+        
+        debug.methods = Object.getOwnPropertyNames(Object.getPrototypeOf(ctx));
+        
+        // Method 1: Try encodeForServer() which returns the serialized context
+        let encodedContext = null;
+        if (typeof ctx.encodeForServer === 'function') {
+          try {
+            encodedContext = ctx.encodeForServer();
+            debug.hasEncodeForServer = true;
+            debug.encodedKeys = encodedContext ? Object.keys(encodedContext) : null;
+          } catch (e) {
+            debug.errors.push('encodeForServer() failed: ' + e.message);
+          }
+        }
+        
+        // If encodeForServer gave us the context, use it
+        if (encodedContext && encodedContext.fwuid) {
+          // Get token
+          let token = null;
+          try {
+            if (window.$A && window.$A.getToken) {
+              token = window.$A.getToken();
+            }
+          } catch (e) {}
+          
+          return {
+            success: true,
+            context: encodedContext,
+            token: token,
+            debug
+          };
+        }
+        
+        // Method 2: Try to find fwuid in obfuscated properties
+        let fwuid = null;
+        const contextKeys = Object.keys(ctx);
+        debug.contextKeys = contextKeys;
+        
+        for (const key of contextKeys) {
+          try {
+            const val = ctx[key];
+            if (typeof val === 'string' && val.length > 30 && val.includes('-')) {
+              // Looks like a fwuid (format: xxx-xxx-xxx...)
+              fwuid = val;
+              debug.fwuidKey = key;
+              break;
+            }
+          } catch (e) {}
+        }
+        
+        if (fwuid) {
+          // Build context manually
+          const mode = typeof ctx.getMode === 'function' ? ctx.getMode() : 'PROD';
+          const app = typeof ctx.getApp === 'function' ? ctx.getApp() : 'one:one';
+          
+          return {
+            success: true,
+            context: {
+              mode: mode,
+              fwuid: fwuid,
+              app: app,
+              loaded: {},
+              dn: [],
+              globals: {},
+              uad: false
+            },
+            token: null,
+            debug
+          };
+        }
+        
+        debug.errors.push('Could not extract fwuid from context');
+        return { success: false, debug };
+      })()
+    `);
+    
+    if (credentials) {
+      log.debug('AURA', 'Context extraction result', {
+        success: credentials.success,
+        contextKeys: credentials.debug?.contextKeys?.slice(0, 5),
+        methods: credentials.debug?.methods?.slice(0, 10),
+        errors: credentials.debug?.errors
+      });
+      
+      if (credentials.success && credentials.context && credentials.context.fwuid) {
+        log.info('AURA', 'Credentials extracted from $A context', {
+          fwuid: credentials.context.fwuid.substring(0, 25) + '...',
+          hasToken: !!credentials.token
+        });
+        return {
+          context: credentials.context,
+          token: credentials.token
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    log.warn('AURA', 'Failed to extract credentials from context', { error: error.message });
+    return null;
+  }
 }
 
 /**
@@ -3396,6 +4016,25 @@ ipcMain.handle('salesforce:uploadDocuments', async (event, params) => {
       uploadedCount: 0,
       failedCount: params?.files?.length || 0,
       results: [],
+      error: e.message,
+    };
+  }
+});
+
+// Create a note linked to a Case
+ipcMain.handle('salesforce:createNote', async (event, params) => {
+  try {
+    log.info('IPC', 'salesforce:createNote called', {
+      caseId: params?.caseId,
+      titleLength: params?.title?.length || 0,
+      contentLength: params?.content?.length || 0,
+    });
+    return await createNote(params);
+  } catch (e) {
+    log.error('IPC', 'salesforce:createNote error', e);
+    return {
+      success: false,
+      noteId: null,
       error: e.message,
     };
   }

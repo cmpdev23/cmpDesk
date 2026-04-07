@@ -114,12 +114,24 @@ queryParams: { 'aura.RecordUi.getRecordWithFields': '1', r: '1' }
 
 ### Credential Capture
 ```javascript
+// Method 1: Network interception (requires pending Aura request)
 page.on("request", req => {
   if (req.method() === "POST" && req.url().includes("/aura")) {
     // Extract aura.context + aura.token from POST body
   }
 });
+
+// Method 2: Direct extraction from $A context (fallback, more reliable)
+const credentials = await page.evaluate(() => {
+  const ctx = $A.getContext();
+  return {
+    context: { fwuid: ctx.fwuid, mode: ctx.getMode(), app: ctx.getApp() },
+    token: ctx.getToken?.() || null
+  };
+});
 ```
+
+**IMPORTANT**: Network interception can fail if no Aura requests are pending. Always use `extractAuraCredentialsFromContext()` as fallback (2026-04-07).
 
 ### Key Discoveries
 

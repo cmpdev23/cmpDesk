@@ -42,7 +42,7 @@ import type {
   NotesStepData,
   SearchStepStatus,
 } from '@/modules/dossiers';
-import type { AccountSearchResult, CreateDossierResult, UploadDocumentsResult } from '@/types/electron';
+import type { AccountSearchResult, CreateDossierResult, UploadDocumentsResult, CreateNoteResult } from '@/types/electron';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -117,6 +117,7 @@ function Dossiers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<CreateDossierResult | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadDocumentsResult | null>(null);
+  const [noteResult, setNoteResult] = useState<CreateNoteResult | null>(null);
 
   // Account creation state
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -390,8 +391,9 @@ function Dossiers() {
     setIsSubmitting(true);
     setSubmitResult(null);
     setUploadResult(null);
+    setNoteResult(null);
 
-    console.log('Submitting form data:', { accountData, accountSearchState, step1Data, step2Data, documentData });
+    console.log('Submitting form data:', { accountData, accountSearchState, step1Data, step2Data, documentData, notesData });
 
     try {
       // ── Step 1: Create Opportunity + Case ─────────────────────────────────────
@@ -446,6 +448,20 @@ function Dossiers() {
 
         console.log('Document upload result:', uploadRes);
         setUploadResult(uploadRes);
+      }
+
+      // ── Step 3: Create note (if notes content exists and Case was created) ────
+      if (result.success && result.caseId && notesData.notes && notesData.notes.trim().length > 0) {
+        console.log('Creating note for Case:', result.caseId);
+
+        const noteRes = await window.electronAPI.salesforce.createNote({
+          caseId: result.caseId,
+          title: 'Note du dossier',
+          content: notesData.notes,
+        });
+
+        console.log('Note creation result:', noteRes);
+        setNoteResult(noteRes);
       }
     } catch (err) {
       console.error('Dossier creation error:', err);
@@ -691,6 +707,41 @@ function Dossiers() {
                         </p>
                       </div>
                     )}
+
+                    {/* Note Result */}
+                    {noteResult && (
+                      <div className="pt-4 border-t border-border">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">📝 Note:</span>
+                          <span className={`text-sm ${
+                            noteResult.success
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-amber-600 dark:text-amber-400'
+                          }`}>
+                            {noteResult.success ? 'Ajoutée' : 'Échec'}
+                          </span>
+                        </div>
+                        {noteResult.warning && (
+                          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                            ⚠️ {noteResult.warning}
+                          </p>
+                        )}
+                        {noteResult.error && !noteResult.success && (
+                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                            {noteResult.error}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* No notes case */}
+                    {!noteResult && (!notesData.notes || notesData.notes.trim().length === 0) && (
+                      <div className="pt-4 border-t border-border">
+                        <p className="text-sm text-muted-foreground">
+                          📝 Aucune note ajoutée
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 )}
               </Card>
@@ -745,6 +796,7 @@ function Dossiers() {
                     setAccountSearchState(null);
                     setSubmitResult(null);
                     setUploadResult(null);
+                    setNoteResult(null);
                   }}
                 >
                   Créer un nouveau dossier
@@ -759,7 +811,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, notesData, submitResult, uploadResult }, null, 2)}
+                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, notesData, submitResult, uploadResult, noteResult }, null, 2)}
                 </pre>
               </details>
             )}

@@ -298,6 +298,32 @@ export interface UploadDocumentsResult {
   error?: string | null;
 }
 
+// ============================================================================
+// NOTE CREATION
+// ============================================================================
+
+/** Create note parameters */
+export interface CreateNoteParams {
+  /** Salesforce Case ID (500...) - required */
+  caseId: string;
+  /** Note title (optional, defaults to "Note") */
+  title?: string;
+  /** Plain text content (will be converted to HTML/Base64) */
+  content: string;
+}
+
+/** Create note result */
+export interface CreateNoteResult {
+  /** Whether note creation was successful */
+  success: boolean;
+  /** Salesforce ContentNote ID (069...) */
+  noteId?: string | null;
+  /** Error message if failed */
+  error?: string | null;
+  /** Warning message if partially successful (note created but not linked) */
+  warning?: string;
+}
+
 export interface SalesforceAPI {
   /** Search for an account by phone, email, or name */
   searchAccount: (params: AccountSearchParams) => Promise<AccountSearchResult>;
@@ -307,6 +333,8 @@ export interface SalesforceAPI {
   createDossier: (params: CreateDossierParams) => Promise<CreateDossierResult>;
   /** Upload documents to OpenText Content Server (xECM) */
   uploadDocuments: (params: UploadDocumentsParams) => Promise<UploadDocumentsResult>;
+  /** Create a Note (ContentNote) linked to a Case */
+  createNote: (params: CreateNoteParams) => Promise<CreateNoteResult>;
 }
 
 // ============================================================================
