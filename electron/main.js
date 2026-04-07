@@ -421,10 +421,45 @@ async function getAuthModule() {
       };
     }
     
+    /**
+     * Logout - clear all auth data (cookies, session state, browser profile)
+     * Used when user wants to force re-authentication or fix auth issues
+     * @returns {Promise<void>}
+     */
+    async function logout() {
+      log.info('AUTH', 'Logout initiated - clearing all auth data');
+      
+      try {
+        // Delete cookies file
+        if (fs.existsSync(COOKIES_FILE)) {
+          fs.unlinkSync(COOKIES_FILE);
+          log.debug('AUTH', 'Deleted cookies file');
+        }
+        
+        // Delete session state file
+        if (fs.existsSync(SESSION_STATE_FILE)) {
+          fs.unlinkSync(SESSION_STATE_FILE);
+          log.debug('AUTH', 'Deleted session state file');
+        }
+        
+        // Delete browser profile directory (recursive)
+        if (fs.existsSync(BROWSER_PROFILE)) {
+          fs.rmSync(BROWSER_PROFILE, { recursive: true, force: true });
+          log.debug('AUTH', 'Deleted browser profile directory');
+        }
+        
+        log.info('AUTH', 'Logout complete - all auth data cleared');
+      } catch (e) {
+        log.error('AUTH', 'Error during logout cleanup', e);
+        throw e;
+      }
+    }
+    
     authModule = {
       getSessionStatus,
       login,
       ensureSession,
+      logout,
       AUTH_DIR,
       BROWSER_PROFILE,
       // Export for Salesforce module
@@ -3966,6 +4001,26 @@ ipcMain.handle('auth:ensureSession', async () => {
     return await auth.ensureSession();
   } catch (e) {
     log.error('IPC', 'auth:ensureSession error', e);
+    return {
+      success: false,
+      error: 'UNKNOWN',
+      message: e.message,
+    };
+  }
+});
+
+// Logout - close session and clear cookies
+ipcMain.handle('auth:logout', async () => {
+  try {
+    log.info('IPC', 'auth:logout called');
+    const auth = await getAuthModule();
+    await auth.logout();
+    return {
+      success: true,
+      message: 'Session cleared successfully',
+    };
+  } catch (e) {
+    log.error('IPC', 'auth:logout error', e);
     return {
       success: false,
       error: 'UNKNOWN',

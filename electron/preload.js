@@ -19,7 +19,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const authAPI = {
   /**
    * Get current session status (quick check, no browser).
-   * 
+   *
    * @returns {Promise<{
    *   isConnected: boolean,
    *   cookieCount: number,
@@ -35,7 +35,7 @@ const authAPI = {
   
   /**
    * Start login flow - opens browser for authentication.
-   * 
+   *
    * @param {boolean} forceAuth - Force re-authentication even if session seems valid
    * @returns {Promise<{
    *   success: boolean,
@@ -47,7 +47,7 @@ const authAPI = {
   
   /**
    * Ensure session is valid, trigger login if needed.
-   * 
+   *
    * @returns {Promise<{
    *   success: boolean,
    *   needsLogin: boolean,
@@ -56,6 +56,18 @@ const authAPI = {
    * }>}
    */
   ensureSession: () => ipcRenderer.invoke('auth:ensureSession'),
+  
+  /**
+   * Logout - clear all session data (cookies, browser profile).
+   * Use when user needs to completely reset authentication state.
+   *
+   * @returns {Promise<{
+   *   success: boolean,
+   *   message?: string,
+   *   error?: string
+   * }>}
+   */
+  logout: () => ipcRenderer.invoke('auth:logout'),
 };
 
 // ============================================================================

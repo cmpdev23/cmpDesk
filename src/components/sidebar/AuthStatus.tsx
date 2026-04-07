@@ -24,7 +24,7 @@ import type { AuthStatus as AuthStatusType } from '../../types/electron';
 // TYPES
 // ============================================================================
 
-type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'expired' | 'logging-in';
+type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'expired' | 'logging-in' | 'logging-out';
 
 interface AuthState {
   connectionState: ConnectionState;
@@ -120,6 +120,33 @@ export function AuthStatus() {
     }
   };
 
+  // Handle logout button click
+  const handleLogout = async () => {
+    setState(prev => ({ ...prev, connectionState: 'logging-out', error: null }));
+
+    try {
+      const result = await window.electronAPI.auth.logout();
+      
+      if (result.success) {
+        // Re-check status after logout
+        await checkStatus();
+      } else {
+        setState(prev => ({
+          ...prev,
+          connectionState: 'disconnected',
+          error: result.message || 'Erreur lors de la déconnexion',
+        }));
+      }
+    } catch (e) {
+      const error = e as Error;
+      setState(prev => ({
+        ...prev,
+        connectionState: 'disconnected',
+        error: error.message,
+      }));
+    }
+  };
+
   // Render based on connection state
   return (
     <div className="p-4 border-t border-sidebar-border">
@@ -138,8 +165,8 @@ export function AuthStatus() {
         </div>
       )}
 
-      {/* Action button */}
-      {state.connectionState !== 'connected' && state.connectionState !== 'checking' && (
+      {/* Login button (when disconnected/expired) */}
+      {state.connectionState !== 'connected' && state.connectionState !== 'checking' && state.connectionState !== 'logging-out' && (
         <Button
           onClick={() => handleLogin(state.connectionState === 'expired')}
           disabled={state.connectionState === 'logging-in'}
@@ -151,16 +178,40 @@ export function AuthStatus() {
         </Button>
       )}
 
-      {/* Session info (when connected) */}
+      {/* Session info and logout (when connected) */}
       {state.connectionState === 'connected' && state.status && (
-        <div className="text-xs text-muted-foreground space-y-1">
-          <div>Cookies: {state.status.cookieCount}</div>
-          {state.status.lastValidated && (
-            <div>
-              Dernière validation: {formatTimeAgo(state.status.lastValidated)}
-            </div>
-          )}
+        <div className="space-y-3">
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div>Cookies: {state.status.cookieCount}</div>
+            {state.status.lastValidated && (
+              <div>
+                Dernière validation: {formatTimeAgo(state.status.lastValidated)}
+              </div>
+            )}
+          </div>
+          
+          {/* Logout button */}
+          <Button
+            onClick={handleLogout}
+            variant="outline"
+            size="sm"
+            className="w-full text-xs"
+          >
+            Se déconnecter
+          </Button>
         </div>
+      )}
+
+      {/* Logging out state */}
+      {state.connectionState === 'logging-out' && (
+        <Button
+          disabled
+          variant="secondary"
+          size="sm"
+          className="w-full"
+        >
+          Déconnexion...
+        </Button>
       )}
     </div>
   );
@@ -182,6 +233,7 @@ function StatusIndicator({ state }: StatusIndicatorProps) {
       case 'expired':
         return 'bg-chart-3';
       case 'logging-in':
+      case 'logging-out':
       case 'checking':
         return 'bg-chart-3 animate-pulse';
       case 'disconnected':
@@ -207,6 +259,8 @@ function getStatusLabel(state: ConnectionState): string {
       return 'Session expirée';
     case 'logging-in':
       return 'Connexion...';
+    case 'logging-out':
+      return 'Déconnexion...';
     case 'checking':
       return 'Vérification...';
     case 'disconnected':

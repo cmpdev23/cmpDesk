@@ -3,7 +3,7 @@
  * @description Page de création de dossier (Opportunity)
  *
  * Multi-step form for creating Opportunities in Salesforce.
- * 
+ *
  * Workflow:
  * - Step 1: Infos Compte (Account contact information)
  * - Step 1.5: Account Search Result (intermediate - shows search result)
@@ -11,6 +11,7 @@
  * - Step 3: Famille de produit (Case)
  *
  * DEV MODE: Validation is bypassed — can navigate freely between steps.
+ * AUTH REQUIRED: User must be connected to Salesforce to use the form.
  *
  * Design System: shadcn/ui (radix-lyra preset)
  *
@@ -51,7 +52,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDevMode } from '@/hooks/use-dev-mode';
+import { useAuthStatus } from '@/hooks/use-auth-status';
+import { AuthRequired } from '@/components/ui/auth-required';
 
 /**
  * Form step types for the workflow
@@ -89,6 +93,13 @@ function getDisplayStep(step: FormStep): number {
 function Dossiers() {
   // DEV mode hook - for validation bypass and debug features
   const { isDevMode, shouldBypassValidation, shouldEnableNextButton } = useDevMode();
+
+  // Auth status hook - checks if user is connected to Salesforce
+  const { isConnected, isChecking, refresh: refreshAuthStatus } = useAuthStatus();
+
+  // Login state (for handling login from this page)
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // Current step navigation
   const [currentStep, setCurrentStep] = useState<FormStep>('account');
@@ -525,10 +536,72 @@ function Dossiers() {
     }
   };
 
+  // ─── Login Handler ──────────────────────────────────────────────────────────────
+
+  /**
+   * Handle login button click from AuthRequired component
+   */
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError(null);
+
+    try {
+      const result = await window.electronAPI.auth.login(false);
+      
+      if (result.success) {
+        // Refresh auth status after successful login
+        await refreshAuthStatus();
+      } else {
+        setLoginError(result.message || 'Échec de la connexion');
+      }
+    } catch (e) {
+      const error = e as Error;
+      setLoginError(error.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   const displayStep = getDisplayStep(currentStep);
   const isSearchResultStep = currentStep === 'search-result';
+
+  // ─── Auth Check: Show loading skeleton while checking ─────────────────────────
+  if (isChecking) {
+    return (
+      <div className="flex flex-col h-full">
+        <DossierPageHeader currentStep={1} />
+        <div className="flex-1 overflow-auto">
+          <div className="p-6">
+            <div className="max-w-4xl space-y-4">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Auth Check: Show login required if not connected ─────────────────────────
+  if (!isConnected && !isDevMode) {
+    return (
+      <div className="flex flex-col h-full">
+        <DossierPageHeader currentStep={1} />
+        <div className="flex-1 overflow-auto">
+          <AuthRequired
+            title="Connexion requise"
+            description="Vous devez être connecté à Salesforce pour créer un dossier."
+            isLoggingIn={isLoggingIn}
+            loginError={loginError}
+            onLoginClick={handleLogin}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">

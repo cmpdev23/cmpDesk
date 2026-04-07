@@ -30,10 +30,17 @@ export interface EnsureSessionResult {
   loginResult?: LoginResult;
 }
 
+export interface LogoutResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 export interface AuthAPI {
   getStatus: () => Promise<AuthStatus>;
   login: (forceAuth?: boolean) => Promise<LoginResult>;
   ensureSession: () => Promise<EnsureSessionResult>;
+  logout: () => Promise<LogoutResult>;
 }
 
 // ============================================================================

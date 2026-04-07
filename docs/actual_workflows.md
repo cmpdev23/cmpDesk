@@ -8,6 +8,49 @@ Documentation du processus utilisateur pour la création de dossiers dans cmpDes
 
 Le formulaire de création de dossier suit un **wizard multi-étapes** permettant de créer une **Opportunity** et un **Case** liés dans Salesforce, puis d'uploader des documents vers **OpenText xECM**.
 
+> **⚠️ Pré-requis**: L'utilisateur **doit être connecté** à Salesforce pour accéder au formulaire. Si non connecté, un écran de connexion est affiché avec un bouton pour déclencher l'authentification.
+
+---
+
+## Vérification de connexion
+
+Avant d'afficher le formulaire, le système vérifie l'état de connexion:
+
+```
+┌─────────────────────┐
+│  Page Dossiers      │
+└──────────┬──────────┘
+           │
+           ▼
+    ┌──────────────┐
+    │ isChecking?  │───▶ Affiche skeleton loading
+    └──────┬───────┘
+           │ false
+           ▼
+    ┌──────────────┐
+    │ isConnected? │───▶ Non: Affiche AuthRequired
+    └──────┬───────┘     (avec bouton login)
+           │ Oui
+           ▼
+    ┌──────────────┐
+    │ Formulaire   │
+    │ multi-étapes │
+    └──────────────┘
+```
+
+### États de connexion
+
+| État | Affichage |
+|------|-----------|
+| `checking` | Skeleton loading (3 bars) |
+| `disconnected` | Card "Connexion requise" avec bouton login |
+| `expired` | Traité comme connecté (l'API gèrera le refresh) |
+| `connected` | Formulaire complet |
+
+### Exception: Mode DEV
+
+En mode DEV (`ENV=DEV`), le formulaire est accessible même sans connexion pour faciliter l'inspection UI.
+
 ```
 ┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌──────────────────┐
 │  Étape 1    │────▶│  Recherche      │────▶│  Étape 2        │────▶│  Étape 3        │────▶│  Étape 4        │────▶│  Étape 5        │────▶│  Soumission      │
