@@ -10,8 +10,8 @@ import { Stepper } from "@/components/ui/stepper";
 
 const DOSSIER_STEPS = [
   { title: "Compte" },
-  { title: "Informations générales" },
-  { title: "Famille de produit" },
+  { title: "Infos Générales" },
+  { title: "Produit" },
   { title: "Documents" },
   { title: "Notes" },
 ];
@@ -24,7 +24,7 @@ export function DossierPageHeader({ currentStep }: DossierPageHeaderProps) {
   return (
     <div className="p-2 border-b border-border bg-background">
       <div className="flex flex-col justify-between max-w-4xl gap-4 pl-4 md:flex-row md:items-center">
-        <h1 className="text-xl font-bold text-foreground">Nouveau dossier</h1>
+        <h1 className="font-bold text-foreground">Nouveau dossier</h1>
 
         <Stepper steps={DOSSIER_STEPS} currentStep={currentStep} />
       </div>
