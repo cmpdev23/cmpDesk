@@ -480,6 +480,35 @@ Note creation is **non-blocking**:
 
 ---
 
+## 🔐 Logout Chirurgical (2026-04-07)
+
+### Problème
+La suppression complète du `browser_profile/` effaçait les données de form autofill de l'utilisateur.
+
+### Solution
+Logout chirurgical qui :
+1. Supprime `cookies.json` et `session_state.json` (nos fichiers de tracking)
+2. Ouvre le profil en headless et supprime uniquement les cookies des domaines auth :
+   - `salesforce.com`, `force.com`, `lightning.force.com`
+   - `inalco.com`, `secureweb.inalco.com`
+3. Préserve : form autofill, local storage, cache, historique
+
+### Domaines Auth
+```javascript
+const AUTH_DOMAINS = [
+  'salesforce.com', '.salesforce.com',
+  'force.com', '.force.com',
+  'lightning.force.com', '.lightning.force.com',
+  'inalco.com', '.inalco.com',
+  'secureweb.inalco.com', '.secureweb.inalco.com',
+];
+```
+
+### Comportement si profil locked
+Si le navigateur est déjà ouvert, seuls les fichiers JSON sont supprimés. Les cookies restent jusqu'à fermeture du navigateur.
+
+---
+
 ## 🚫 Anti-patterns
 
 - **Don't construct aura.context manually** — capture from real requests
@@ -488,3 +517,4 @@ Note creation is **non-blocking**:
 - **Don't run two scripts simultaneously** — browser_profile gets locked
 - **Don't use Escape/Tab on Flow modals** — Escape closes modal, Tab may trigger Next button
 - **IPC handlers in main.js, NOT modular** — `electron/ipc/` folder exists but main.js uses inline handlers. Add new IPC handlers directly in `main.js` after `salesforce:searchAccount`
+- **Don't delete browser_profile/ entirely for logout** — use surgical cookie removal to preserve form autofill

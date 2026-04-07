@@ -422,33 +422,112 @@ async function getAuthModule() {
     }
     
     /**
-     * Logout - clear all auth data (cookies, session state, browser profile)
-     * Used when user wants to force re-authentication or fix auth issues
+     * Logout - clear auth cookies while preserving browser profile (form autofill, etc.)
+     * Uses surgical approach: removes only auth-related cookies from specific domains
+     * Preserves: form autofill data, local storage preferences, other user data
      * @returns {Promise<void>}
      */
     async function logout() {
-      log.info('AUTH', 'Logout initiated - clearing all auth data');
+      log.info('AUTH', 'Logout initiated - clearing auth cookies (preserving browser profile)');
+      
+      // Domains that contain authentication cookies - be comprehensive
+      const AUTH_DOMAINS = [
+        'salesforce.com',
+        '.salesforce.com',
+        'force.com',
+        '.force.com',
+        'lightning.force.com',
+        '.lightning.force.com',
+        'inalco.com',
+        '.inalco.com',
+        'secureweb.inalco.com',
+        '.secureweb.inalco.com',
+      ];
       
       try {
-        // Delete cookies file
+        // Step 1: Delete our JSON files (auth state tracking)
         if (fs.existsSync(COOKIES_FILE)) {
           fs.unlinkSync(COOKIES_FILE);
-          log.debug('AUTH', 'Deleted cookies file');
+          log.debug('AUTH', 'Deleted cookies.json file');
         }
         
-        // Delete session state file
         if (fs.existsSync(SESSION_STATE_FILE)) {
           fs.unlinkSync(SESSION_STATE_FILE);
-          log.debug('AUTH', 'Deleted session state file');
+          log.debug('AUTH', 'Deleted session_state.json file');
         }
         
-        // Delete browser profile directory (recursive)
+        // Step 2: If browser profile exists, clear cookies from auth domains
         if (fs.existsSync(BROWSER_PROFILE)) {
-          fs.rmSync(BROWSER_PROFILE, { recursive: true, force: true });
-          log.debug('AUTH', 'Deleted browser profile directory');
+          let context;
+          try {
+            // Launch headless context to manipulate cookies
+            context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+              headless: true,
+              args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+            });
+            
+            // Get all cookies
+            const allCookies = await context.cookies();
+            log.debug('AUTH', `Found ${allCookies.length} total cookies in browser profile`);
+            
+            // Filter to find auth cookies to remove
+            const cookiesToRemove = allCookies.filter(cookie => {
+              const domain = cookie.domain || '';
+              return AUTH_DOMAINS.some(authDomain =>
+                domain === authDomain ||
+                domain.endsWith(authDomain) ||
+                authDomain.endsWith(domain)
+              );
+            });
+            
+            if (cookiesToRemove.length > 0) {
+              log.debug('AUTH', `Removing ${cookiesToRemove.length} auth cookies from domains: ${[...new Set(cookiesToRemove.map(c => c.domain))].join(', ')}`);
+              
+              // Clear cookies by setting them with expired date
+              // Playwright's clearCookies clears ALL cookies, so we need to be surgical
+              for (const cookie of cookiesToRemove) {
+                try {
+                  // To delete a specific cookie, we need to get the URLs it applies to
+                  const protocol = cookie.secure ? 'https' : 'http';
+                  const domain = cookie.domain?.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+                  const url = `${protocol}://${domain}${cookie.path || '/'}`;
+                  
+                  // Clear cookies for this specific URL
+                  await context.clearCookies({ domain: cookie.domain });
+                } catch (clearErr) {
+                  log.warn('AUTH', `Could not clear cookie ${cookie.name}: ${clearErr.message}`);
+                }
+              }
+              
+              // Verify removal
+              const remainingCookies = await context.cookies();
+              const remainingAuthCookies = remainingCookies.filter(cookie => {
+                const domain = cookie.domain || '';
+                return AUTH_DOMAINS.some(authDomain =>
+                  domain === authDomain ||
+                  domain.endsWith(authDomain) ||
+                  authDomain.endsWith(domain)
+                );
+              });
+              
+              log.info('AUTH', `Auth cookies cleared. Remaining: ${remainingAuthCookies.length} auth, ${remainingCookies.length} total`);
+            } else {
+              log.debug('AUTH', 'No auth cookies found to remove');
+            }
+            
+            await context.close();
+          } catch (browserErr) {
+            // If browser profile is locked, we can't clear cookies surgically
+            if (browserErr.message.includes('lock') || browserErr.message.includes('already in use')) {
+              log.warn('AUTH', 'Browser profile locked - cannot clear cookies surgically. Only JSON files deleted.');
+            } else {
+              log.warn('AUTH', `Could not open browser profile: ${browserErr.message}`);
+            }
+            // Don't throw - we still deleted the JSON files which is the minimum logout
+          }
         }
         
-        log.info('AUTH', 'Logout complete - all auth data cleared');
+        log.info('AUTH', 'Logout complete - auth data cleared, browser profile preserved');
       } catch (e) {
         log.error('AUTH', 'Error during logout cleanup', e);
         throw e;
