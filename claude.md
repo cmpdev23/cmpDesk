@@ -185,6 +185,29 @@ src/
 
 ---
 
+## 🧪 DEV Mode Form Bypass
+
+**Purpose**: Navigate freely through form steps without triggering automations (for UI inspection/debugging).
+
+**How it works**:
+- When `ENV=DEV` in `.env` AND form fields are completely empty → bypass validation AND skip automations
+- When `ENV=DEV` AND some fields are filled → normal validation (user intent detected)
+- When `ENV=PROD` → always enforce validation and automations
+
+**Implementation**:
+- `src/lib/dev-mode.ts` — centralized DEV mode utilities
+- `src/hooks/use-dev-mode.ts` — React hook for components
+- Key function: `shouldBypassValidation(formData)` returns `true` if DEV mode + empty form
+
+**Affected flows**:
+- Account step → Next button skips search step if form empty in DEV mode
+- All validation functions check `shouldBypassValidation()` before enforcing rules
+- "Next" button always enabled in DEV mode (no disabled state)
+
+**Visual indicator**: Yellow banner "Mode DEV — Navigation libre" at top of Dossiers page.
+
+---
+
 ## 📋 Active TODOs
 
 - [ ] Create `lib/upload_document.js` stable function for main.js integration

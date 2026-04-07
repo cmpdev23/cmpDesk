@@ -29,10 +29,10 @@ import {
   DEFAULT_STEP2_DATA,
   DossierPageHeader,
 } from '@/modules/dossiers';
-import type { 
-  AccountStepData, 
-  AccountSearchState, 
-  OpportunityStep1Data, 
+import type {
+  AccountStepData,
+  AccountSearchState,
+  OpportunityStep1Data,
   CaseStep2Data,
   SearchStepStatus,
 } from '@/modules/dossiers';
@@ -45,9 +45,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-
-// DEV mode flag — skip validation when true
-const IS_DEV = import.meta.env.DEV;
+import { useDevMode } from '@/hooks/use-dev-mode';
 
 /**
  * Form step types for the workflow
@@ -77,6 +75,9 @@ function getDisplayStep(step: FormStep): number {
  * Dossiers page - Multi-step form for opportunity creation
  */
 function Dossiers() {
+  // DEV mode hook - for validation bypass and debug features
+  const { isDevMode, shouldBypassValidation, shouldEnableNextButton } = useDevMode();
+
   // Current step navigation
   const [currentStep, setCurrentStep] = useState<FormStep>('account');
 
@@ -110,10 +111,11 @@ function Dossiers() {
 
   /**
    * Validate Account step required fields.
-   * Returns true if valid or in DEV mode.
+   * Returns true if valid or if DEV mode bypass applies (empty form in DEV).
    */
   const validateAccount = (): boolean => {
-    if (IS_DEV) return true; // Skip validation in DEV mode
+    // DEV mode bypass: skip validation if form is completely empty
+    if (shouldBypassValidation(accountData)) return true;
 
     const errors: Record<string, string> = {};
 
@@ -148,10 +150,11 @@ function Dossiers() {
 
   /**
    * Validate Step 1 required fields (Informations générales).
-   * Returns true if valid or in DEV mode.
+   * Returns true if valid or if DEV mode bypass applies (empty form in DEV).
    */
   const validateStep1 = (): boolean => {
-    if (IS_DEV) return true; // Skip validation in DEV mode
+    // DEV mode bypass: skip validation if form is completely empty
+    if (shouldBypassValidation(step1Data)) return true;
 
     const errors: Record<string, string> = {};
 
@@ -168,10 +171,11 @@ function Dossiers() {
 
   /**
    * Validate Step 2 required fields (Famille de produit).
-   * Returns true if valid or in DEV mode.
+   * Returns true if valid or if DEV mode bypass applies (empty form in DEV).
    */
   const validateStep2 = (): boolean => {
-    if (IS_DEV) return true; // Skip validation in DEV mode
+    // DEV mode bypass: skip validation if form is completely empty
+    if (shouldBypassValidation(step2Data)) return true;
 
     const errors: Record<string, string> = {};
 
@@ -230,8 +234,15 @@ function Dossiers() {
 
   const handleNext = () => {
     if (currentStep === 'account') {
+      // DEV mode bypass: skip search if form is completely empty (inspection mode)
+      if (shouldBypassValidation(accountData)) {
+        // Skip search step entirely - go straight to opportunity form
+        setCurrentStep('opportunity');
+        return;
+      }
+      
       if (validateAccount()) {
-        // Trigger search and show intermediate step
+        // Normal flow: Trigger search and show intermediate step
         performAccountSearch();
       }
     } else if (currentStep === 'opportunity') {
@@ -431,9 +442,9 @@ function Dossiers() {
       <DossierPageHeader currentStep={displayStep} />
 
       {/* DEV mode indicator */}
-      {IS_DEV && (
+      {isDevMode && (
         <div className="px-6 py-1 text-xs font-medium text-center text-amber-800 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-200">
-          Mode DEV — Validation désactivée
+          Mode DEV — Navigation libre (validation bypass si formulaire vide)
         </div>
       )}
 
@@ -545,7 +556,7 @@ function Dossiers() {
                 ) : (
                   <Button
                     onClick={handleNext}
-                    disabled={currentStep === 'account' && !isAccountStepComplete()}
+                    disabled={currentStep === 'account' && !shouldEnableNextButton(isAccountStepComplete())}
                   >
                     Suivant →
                   </Button>
@@ -574,7 +585,7 @@ function Dossiers() {
             )}
 
             {/* Debug: Current form data (DEV only) */}
-            {IS_DEV && (
+            {isDevMode && (
               <details className="mt-8">
                 <summary className="text-xs cursor-pointer text-muted-foreground hover:text-foreground">
                   Debug: Form Data
