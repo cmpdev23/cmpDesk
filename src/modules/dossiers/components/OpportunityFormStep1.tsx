@@ -172,28 +172,8 @@ export function OpportunityFormStep1({
             />
           </FormField>
 
-          {/* ─── Prime annuelle ────────────────────────────────────────── */}
-          <FormField
-            label="Prime annuelle"
-            htmlFor="annualPremium"
-            error={errors.annualPremium}
-          >
-            <div className="relative">
-              <InputField
-                id="annualPremium"
-                name="annualPremium"
-                type="number"
-                value={data.annualPremium}
-                onChange={handleInputChange}
-                placeholder="0.00"
-                min={0}
-                step="0.01"
-              />
-              <span className="absolute text-sm -translate-y-1/2 pointer-events-none right-10 top-1/2 text-muted-foreground">
-                $
-              </span>
-            </div>
-          </FormField>
+          {/* ─── Prime annuelle ─── hidden, valeur fixe 23 ─────────────── */}
+          {/* annualPremium is intentionally hidden — fixed default value: 23 */}
         </div>
       </CardContent>
     </Card>

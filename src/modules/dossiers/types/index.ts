@@ -94,8 +94,8 @@ export const DEFAULT_STEP1_DATA: OpportunityStep1Data = {
   subsidiary: '',
   proposalNumber: '',
   contractNumber: '',
-  transactionDate: '',
-  annualPremium: '',
+  transactionDate: new Date().toISOString().split('T')[0], // defaults to today (YYYY-MM-DD)
+  annualPremium: '23', // hidden field — fixed default value
 };
 
 export const DEFAULT_STEP2_DATA: CaseStep2Data = {
