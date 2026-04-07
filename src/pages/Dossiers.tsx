@@ -416,6 +416,27 @@ function Dossiers() {
   };
 
   const handleStep1Change = (data: OpportunityStep1Data) => {
+    // Smart pre-fill: when opportunityCategory changes to "Insurance",
+    // auto-select productInterest = "Life Insurance" (Step 2)
+    // and pre-populate productFamily = "Insurance" in Step 3 (case form)
+    if (
+      data.opportunityCategory === 'Insurance' &&
+      step1Data.opportunityCategory !== 'Insurance'
+    ) {
+      // Auto-select productInterest in this step
+      data = { ...data, productInterest: 'Life Insurance' };
+
+      // Pre-populate Step 3 productFamily (reset cascade children)
+      setStep2Data((prev) => ({
+        ...prev,
+        productFamily: 'Insurance',
+        transactionCategory: '',
+        transactionSubCategory: '',
+        signatureType: '',
+        productType: '',
+      }));
+    }
+
     setStep1Data(data);
     // Clear errors when user modifies data
     if (Object.keys(step1Errors).length > 0) {

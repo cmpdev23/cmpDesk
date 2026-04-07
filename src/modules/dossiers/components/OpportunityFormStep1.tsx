@@ -52,9 +52,15 @@ export function OpportunityFormStep1({
   errors = {},
 }: OpportunityFormStep1Props) {
   // Handler for shadcn Input (DOM ChangeEvent)
+  // Special mirror: proposalNumber → contractNumber (one-way only)
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    onChange({ ...data, [name]: value });
+    const updates: Partial<typeof data> = { [name]: value };
+    // Mirror proposal → contract (not the reverse)
+    if (name === 'proposalNumber') {
+      updates.contractNumber = value;
+    }
+    onChange({ ...data, ...updates });
   };
 
   // Handler for shadcn Select (Radix onValueChange — pure string)
