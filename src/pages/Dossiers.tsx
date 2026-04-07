@@ -24,9 +24,11 @@ import {
   AccountSearchStep,
   OpportunityFormStep1,
   OpportunityFormStep2,
+  DocumentUploadStep,
   DEFAULT_ACCOUNT_DATA,
   DEFAULT_STEP1_DATA,
   DEFAULT_STEP2_DATA,
+  DEFAULT_DOCUMENT_UPLOAD_DATA,
   DossierPageHeader,
 } from '@/modules/dossiers';
 import type {
@@ -34,6 +36,7 @@ import type {
   AccountSearchState,
   OpportunityStep1Data,
   CaseStep2Data,
+  DocumentUploadStepData,
   SearchStepStatus,
 } from '@/modules/dossiers';
 import type { AccountSearchResult, CreateDossierResult } from '@/types/electron';
@@ -53,11 +56,12 @@ import { useDevMode } from '@/hooks/use-dev-mode';
  * - 'search-result': Step 1.5 - Intermediate search result step
  * - 'opportunity': Step 2 - Opportunity details
  * - 'case': Step 3 - Case/Product family details
+ * - 'documents': Step 4 - Document upload
  */
-type FormStep = 'account' | 'search-result' | 'opportunity' | 'case';
+type FormStep = 'account' | 'search-result' | 'opportunity' | 'case' | 'documents';
 
 /**
- * Get display step number for header (1, 2, or 3)
+ * Get display step number for header (1, 2, 3, or 4)
  */
 function getDisplayStep(step: FormStep): number {
   switch (step) {
@@ -68,6 +72,8 @@ function getDisplayStep(step: FormStep): number {
       return 2;
     case 'case':
       return 3;
+    case 'documents':
+      return 4;
   }
 }
 
@@ -85,6 +91,7 @@ function Dossiers() {
   const [accountData, setAccountData] = useState<AccountStepData>(DEFAULT_ACCOUNT_DATA);
   const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
   const [step2Data, setStep2Data] = useState<CaseStep2Data>(DEFAULT_STEP2_DATA);
+  const [documentData, setDocumentData] = useState<DocumentUploadStepData>(DEFAULT_DOCUMENT_UPLOAD_DATA);
 
   // Account search state
   const [searchStatus, setSearchStatus] = useState<SearchStepStatus>('searching');
@@ -249,6 +256,10 @@ function Dossiers() {
       if (validateStep1()) {
         setCurrentStep('case');
       }
+    } else if (currentStep === 'case') {
+      if (validateStep2()) {
+        setCurrentStep('documents');
+      }
     }
     // Note: 'search-result' step uses its own buttons, not the main Next button
   };
@@ -261,6 +272,8 @@ function Dossiers() {
       setCurrentStep('account');
     } else if (currentStep === 'case') {
       setCurrentStep('opportunity');
+    } else if (currentStep === 'documents') {
+      setCurrentStep('case');
     }
   };
 
@@ -516,6 +529,14 @@ function Dossiers() {
               />
             )}
 
+            {/* Step 4: Document Upload */}
+            {currentStep === 'documents' && (
+              <DocumentUploadStep
+                data={documentData}
+                onChange={setDocumentData}
+              />
+            )}
+
             {/* Submission Result */}
             {submitResult && (
               <Card className={`mt-6 pl-1 border ${submitResult.success ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
@@ -563,7 +584,7 @@ function Dossiers() {
                   ← Précédent
                 </Button>
 
-                {currentStep === 'case' ? (
+                {currentStep === 'documents' ? (
                   <Button onClick={handleSubmit} disabled={isSubmitting}>
                     {isSubmitting ? (
                       <>
@@ -596,6 +617,7 @@ function Dossiers() {
                     setAccountData(DEFAULT_ACCOUNT_DATA);
                     setStep1Data(DEFAULT_STEP1_DATA);
                     setStep2Data(DEFAULT_STEP2_DATA);
+                    setDocumentData(DEFAULT_DOCUMENT_UPLOAD_DATA);
                     setAccountSearchState(null);
                     setSubmitResult(null);
                   }}
@@ -612,7 +634,7 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, submitResult }, null, 2)}
+                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, submitResult }, null, 2)}
                 </pre>
               </details>
             )}

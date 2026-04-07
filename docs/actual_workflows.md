@@ -9,10 +9,10 @@ Documentation du processus utilisateur pour la création de dossiers dans cmpDes
 Le formulaire de création de dossier suit un **wizard multi-étapes** permettant de créer une **Opportunity** et un **Case** liés dans Salesforce.
 
 ```
-┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Étape 1    │────▶│  Recherche      │────▶│  Étape 2        │────▶│  Étape 3        │
-│  Compte     │     │  Compte (auto)  │     │  Opportunity    │     │  Case           │
-└─────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Étape 1    │────▶│  Recherche      │────▶│  Étape 2        │────▶│  Étape 3        │────▶│  Étape 4        │
+│  Compte     │     │  Compte (auto)  │     │  Opportunity    │     │  Case           │     │  Documents      │
+└─────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
 ---
@@ -131,6 +131,50 @@ Famille de produit
 
 ---
 
+## Étape 4 — Dépôt de documents
+
+**Objectif**: Permettre à l'utilisateur d'ajouter des documents au dossier.
+
+### Interface
+
+| Élément | Description |
+|---------|-------------|
+| Zone de dépôt | Drag-and-drop avec indication visuelle |
+| Bouton parcourir | Alternative au glisser-déposer |
+| Liste des fichiers | Affiche les fichiers sélectionnés avec taille et type |
+
+### Formats acceptés
+
+| Type | Extensions |
+|------|------------|
+| Documents | .pdf, .doc, .docx, .txt |
+| Tableurs | .xlsx, .xls |
+| Images | .png, .jpg, .jpeg, .gif, .webp |
+
+### Formats bloqués (sécurité)
+
+- Exécutables (.exe, .bat, .cmd, .sh)
+- Scripts (.js, .vbs, .ps1)
+- Archives potentiellement dangereuses (.zip, .rar)
+
+### Comportement
+
+1. L'utilisateur peut glisser-déposer ou cliquer pour parcourir
+2. Les fichiers valides sont ajoutés à la liste
+3. Les fichiers non acceptés affichent un message d'erreur
+4. Chaque fichier peut être supprimé individuellement
+5. Bouton "Tout supprimer" si plusieurs fichiers
+
+### Informations affichées par fichier
+
+- Icône selon le type (📄 PDF, 📝 Word, 📊 Excel, 🖼️ Image)
+- Nom du fichier (tronqué si trop long)
+- Type de fichier
+- Taille (KB/MB)
+- Bouton de suppression
+
+---
+
 ## Soumission
 
 ### Processus
@@ -172,7 +216,7 @@ En mode développement (`DEV_MODE=true`):
 1. Entrer infos client ──────▶ 2. Recherche auto ──────▶ 3. Choisir/Créer compte
                                                                     │
                                                                     ▼
-6. Résultat création ◀────── 5. Soumission ◀────── 4. Remplir Opportunity + Case
+7. Résultat création ◀────── 6. Soumission ◀────── 5. Documents ◀────── 4. Remplir Opportunity + Case
 ```
 
-**Temps estimé**: 2-3 minutes pour un dossier complet.
+**Temps estimé**: 2-4 minutes pour un dossier complet.

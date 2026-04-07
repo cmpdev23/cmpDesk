@@ -15,6 +15,8 @@ export { AccountSearchStep } from './components/AccountSearchStep';
 export type { SearchStepStatus } from './components/AccountSearchStep';
 export { OpportunityFormStep1 } from './components/OpportunityFormStep1';
 export { OpportunityFormStep2 } from './components/OpportunityFormStep2';
+export { DocumentUploadStep, DEFAULT_DOCUMENT_UPLOAD_DATA } from './components/DocumentUploadStep';
+export type { DocumentUploadStepData, UploadedFile } from './components/DocumentUploadStep';
 export { DossierPageHeader } from './components/DossierPageHeader';
 
 // Types
