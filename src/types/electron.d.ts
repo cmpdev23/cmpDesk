@@ -155,6 +155,36 @@ export interface AccountSearchResult {
 }
 
 // ============================================================================
+// ACCOUNT CREATION
+// ============================================================================
+
+export interface CreateAccountParams {
+  /** First name */
+  firstName?: string;
+  /** Last name (required) */
+  lastName: string;
+  /** Phone number (10 digits) */
+  phone?: string;
+  /** Email address */
+  email?: string;
+}
+
+export interface CreateAccountResult {
+  /** Whether account creation was successful */
+  success: boolean;
+  /** Salesforce Account ID (001...) */
+  accountId?: string;
+  /** Account name (FirstName + LastName) */
+  accountName?: string;
+  /** URL to the Account in Salesforce */
+  accountUrl?: string;
+  /** Error message if failed */
+  error?: string;
+  /** Human-readable message */
+  message?: string;
+}
+
+// ============================================================================
 // DOSSIER CREATION
 // ============================================================================
 
@@ -219,6 +249,8 @@ export interface CreateDossierResult {
 export interface SalesforceAPI {
   /** Search for an account by phone, email, or name */
   searchAccount: (params: AccountSearchParams) => Promise<AccountSearchResult>;
+  /** Create a new Account in Salesforce */
+  createAccount: (params: CreateAccountParams) => Promise<CreateAccountResult>;
   /** Create a complete dossier (Opportunity + Case) */
   createDossier: (params: CreateDossierParams) => Promise<CreateDossierResult>;
 }

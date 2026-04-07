@@ -714,6 +714,226 @@ async function searchAccount({ phone, email, firstName, lastName }) {
 }
 
 /**
+ * Create a new Account in Salesforce.
+ *
+ * Creates an FSC Individual account with the provided contact information.
+ *
+ * @param {Object} params - Account data
+ * @param {string} [params.firstName] - First name
+ * @param {string} params.lastName - Last name (required)
+ * @param {string} [params.phone] - Phone number (10 digits)
+ * @param {string} [params.email] - Email address
+ * @returns {Promise<{ success: boolean, accountId?: string, accountName?: string, accountUrl?: string, error?: string }>}
+ */
+async function createAccount({ firstName, lastName, phone, email }) {
+  log.info('AURA', 'Starting account creation', { firstName, lastName, hasPhone: !!phone, hasEmail: !!email });
+  
+  const result = {
+    success: false,
+    accountId: null,
+    accountName: null,
+    accountUrl: null,
+    error: null,
+  };
+  
+  if (!lastName) {
+    result.error = 'LastName is required';
+    return result;
+  }
+  
+  const auth = await getAuthModule();
+  const { chromium, restoreCookies, BROWSER_PROFILE } = auth;
+  
+  let context;
+  try {
+    // Launch browser with persistent context
+    context = await chromium.launchPersistentContext(BROWSER_PROFILE, {
+      headless: false,
+      viewport: { width: 1280, height: 900 },
+      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+    });
+    
+    await restoreCookies(context);
+    const page = context.pages()[0] || await context.newPage();
+    
+    // Navigate to Salesforce
+    log.debug('AURA', 'Navigating to Salesforce...');
+    await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+    
+    // Check if Aura is available
+    let auraAvailable = await page.evaluate("typeof $A !== 'undefined' && typeof $A.getContext === 'function'");
+    
+    if (!auraAvailable) {
+      log.warn('AURA', 'Aura not available - waiting for authentication...');
+      const authenticated = await waitForAuraAuthentication(page);
+      
+      if (!authenticated) {
+        result.error = 'Authentication timeout';
+        await context.close();
+        return result;
+      }
+      
+      await page.goto(SF_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(3000);
+    }
+    
+    // Capture Aura credentials
+    log.debug('AURA', 'Capturing Aura credentials...');
+    const credentials = await captureAuraCredentials(page);
+    if (!credentials) {
+      result.error = 'Could not capture Aura credentials';
+      await context.close();
+      return result;
+    }
+    
+    // Build account fields
+    const FSC_INDIVIDUAL_RECORD_TYPE_ID = '0125Y000001zWhpQAE';
+    
+    const accountFields = {
+      LastName: lastName.trim(),
+      RecordTypeId: FSC_INDIVIDUAL_RECORD_TYPE_ID,
+    };
+    
+    if (firstName) {
+      accountFields.FirstName = firstName.trim();
+    }
+    
+    if (phone) {
+      // Clean phone number - keep only digits, take last 10
+      const cleanPhone = phone.replace(/\D/g, '');
+      if (cleanPhone.length >= 10) {
+        accountFields.Phone = cleanPhone.slice(-10);
+        // SF validation rule: Phone requires Primary_Phone_Type__c
+        // Valid values: TEL_CEL (Cellulaire), TEL_HOM (Maison), TEL_OFF (Bureau), TEL_OTH (Autre)
+        accountFields.Primary_Phone_Type__c = 'TEL_CEL';
+      }
+    }
+    
+    if (email) {
+      accountFields.Primary_Email__c = email.trim();
+      // SF validation rule: Primary_Email__c requires Primary_Email_Type__c
+      // Valid values: EMA_PRI (Principal), EMA_OFF (Bureau)
+      accountFields.Primary_Email_Type__c = 'EMA_PRI';
+    }
+    
+    log.debug('AURA', 'Account fields to create:', accountFields);
+    
+    // Create account via Aura API
+    const createResult = await page.evaluate(async ({ credentials, fields }) => {
+      const descriptor = 'aura://RecordUiController/ACTION$createRecord';
+      
+      const message = {
+        actions: [{
+          id: '1;a',
+          descriptor,
+          callingDescriptor: 'UNKNOWN',
+          params: {
+            recordInput: {
+              allowSaveOnDuplicate: true,
+              apiName: 'Account',
+              fields: fields,
+            },
+          },
+        }],
+      };
+      
+      const body = new URLSearchParams();
+      body.append('message', JSON.stringify(message));
+      body.append('aura.context', JSON.stringify(credentials.context));
+      body.append('aura.token', credentials.token || 'undefined');
+      
+      const qp = new URLSearchParams({
+        'aura.RecordUi.createRecord': '1',
+        r: '1'
+      });
+      
+      try {
+        const response = await fetch('/aura?' + qp.toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+          body: body.toString(),
+          credentials: 'include',
+        });
+        
+        if (!response.ok) {
+          return { success: false, error: `HTTP ${response.status}` };
+        }
+        
+        const rawText = await response.text();
+        const firstBrace = rawText.indexOf('{');
+        if (firstBrace === -1) return { success: false, error: 'No JSON in response' };
+        
+        // Extract first JSON object
+        let depth = 0, inString = false, escape = false, start = -1;
+        for (let i = firstBrace; i < rawText.length; i++) {
+          const ch = rawText[i];
+          if (escape) { escape = false; continue; }
+          if (ch === '\\' && inString) { escape = true; continue; }
+          if (ch === '"') { inString = !inString; continue; }
+          if (inString) continue;
+          if (ch === '{') { if (depth === 0) start = i; depth++; }
+          else if (ch === '}') {
+            depth--;
+            if (depth === 0 && start !== -1) {
+              const jsonStr = rawText.substring(start, i + 1);
+              try {
+                const data = JSON.parse(jsonStr);
+                const actions = data.actions || [];
+                if (actions.length === 0) {
+                  return { success: false, error: 'Empty Aura response' };
+                }
+                const action = actions[0];
+                if (action.state === 'SUCCESS') {
+                  const returnValue = action.returnValue || {};
+                  const recordId = returnValue.id || returnValue.record?.id;
+                  return { success: true, recordId };
+                } else {
+                  const errors = action.error || [];
+                  const errorMsg = errors.length > 0
+                    ? (errors[0].message || errors[0].exceptionMessage || JSON.stringify(errors[0]))
+                    : `Aura state: ${action.state}`;
+                  return { success: false, error: errorMsg };
+                }
+              } catch (e) {
+                return { success: false, error: `JSON parse error: ${e.message}` };
+              }
+            }
+          }
+        }
+        return { success: false, error: 'Invalid JSON response' };
+      } catch (e) {
+        return { success: false, error: `Fetch error: ${e.message}` };
+      }
+    }, { credentials, fields: accountFields });
+    
+    if (createResult.success && createResult.recordId) {
+      result.success = true;
+      result.accountId = createResult.recordId;
+      result.accountName = [firstName, lastName].filter(Boolean).join(' ');
+      result.accountUrl = `https://indall.lightning.force.com/lightning/r/Account/${createResult.recordId}/view`;
+      
+      log.info('AURA', 'Account created successfully', {
+        accountId: result.accountId,
+        accountName: result.accountName,
+      });
+    } else {
+      result.error = createResult.error || 'Unknown error';
+      log.error('AURA', 'Account creation failed', { error: result.error });
+    }
+    
+    await context.close();
+    return result;
+    
+  } catch (e) {
+    log.error('AURA', 'Account creation exception', e);
+    result.error = e.message;
+    if (context) await context.close();
+    return result;
+  }
+}
+
+/**
  * Create a dossier (Opportunity + Case update).
  *
  * This function:
@@ -2319,6 +2539,26 @@ ipcMain.handle('salesforce:searchAccount', async (event, params) => {
       found: false,
       error: 'UNKNOWN',
       message: e.message,
+    };
+  }
+});
+
+// Create a new account
+ipcMain.handle('salesforce:createAccount', async (event, params) => {
+  try {
+    log.info('IPC', 'salesforce:createAccount called', {
+      firstName: params?.firstName,
+      lastName: params?.lastName,
+      hasPhone: !!params?.phone,
+      hasEmail: !!params?.email,
+    });
+    return await createAccount(params);
+  } catch (e) {
+    log.error('IPC', 'salesforce:createAccount error', e);
+    return {
+      success: false,
+      error: e.message,
+      message: 'Erreur lors de la création du compte',
     };
   }
 });

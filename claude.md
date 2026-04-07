@@ -26,6 +26,28 @@
 
 **Response structure**: `returnValue.answers[].data.results[].result[].record`
 
+### Account Creation (FSC Individual)
+
+**Required fields**:
+- `LastName` (required)
+- `RecordTypeId`: `0125Y000001zWhpQAE` (FSC Individual - auto-set)
+
+**Optional fields**:
+- `FirstName`
+- `Phone` (10 digits, cleaned automatically)
+- `Primary_Email__c`
+
+**⚠️ CRITICAL: SF Validation Rules require paired fields**:
+- When `Phone` is set → MUST also set `Primary_Phone_Type__c` = `'TEL_CEL'` (Cellulaire)
+- When `Primary_Email__c` is set → MUST also set `Primary_Email_Type__c` = `'EMA_PRI'` (Principal)
+- **Error message**: "Vous devez remplir les deux champs..."
+
+**Valid Picklist Values (discovered 2026-04-06)**:
+- `Primary_Email_Type__c`: `EMA_PRI` (Principal), `EMA_OFF` (Bureau)
+- `Primary_Phone_Type__c`: `TEL_CEL` (Cellulaire), `TEL_HOM` (Maison), `TEL_OFF` (Bureau), `TEL_FAX` (Fax), `TEL_FREE` (Sans frais), `TEL_OTH` (Autre)
+
+**API**: `aura://RecordUiController/ACTION$createRecord` with `queryParams: { 'aura.RecordUi.createRecord': '1' }`
+
 ### Record Types
 
 | Object | RecordTypeId |

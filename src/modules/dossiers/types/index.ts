@@ -29,6 +29,8 @@ export interface AccountSearchState {
   accountName?: string;
   /** How the account was matched */
   matchedBy?: 'phone' | 'email' | 'name';
+  /** True if this is a newly created account (not an existing one) */
+  isNewAccount?: boolean;
 }
 
 /**

@@ -182,6 +182,28 @@ const salesforceAPI = {
   searchAccount: (params) => ipcRenderer.invoke('salesforce:searchAccount', params),
   
   /**
+   * Create a new Account in Salesforce.
+   *
+   * Uses the data provided during search step.
+   * RecordTypeId is automatically set to FSC Individual.
+   *
+   * @param {Object} params
+   * @param {string} params.firstName - First name
+   * @param {string} params.lastName - Last name (required)
+   * @param {string} [params.phone] - Phone number (10 digits)
+   * @param {string} [params.email] - Email address
+   * @returns {Promise<{
+   *   success: boolean,
+   *   accountId?: string,
+   *   accountName?: string,
+   *   accountUrl?: string,
+   *   error?: string,
+   *   message?: string
+   * }>}
+   */
+  createAccount: (params) => ipcRenderer.invoke('salesforce:createAccount', params),
+  
+  /**
    * Create a complete dossier (Opportunity + Case).
    *
    * Workflow:
@@ -221,5 +243,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 console.log('🚀 cmpDesk preload script loaded');
 console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
-console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createDossier}');
+console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');

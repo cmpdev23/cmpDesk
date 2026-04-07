@@ -25,7 +25,7 @@ import type { AccountSearchResult, AccountCandidate } from "@/types/electron";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SearchStepStatus = 'searching' | 'found' | 'multiple' | 'not-found' | 'error';
+export type SearchStepStatus = 'searching' | 'found' | 'multiple' | 'not-found' | 'error' | 'creating';
 
 interface AccountSearchStepProps {
   /** Current search status */
@@ -40,6 +40,10 @@ interface AccountSearchStepProps {
   onCreateNew: () => void;
   /** Called when user wants to go back to edit account info */
   onPrevious: () => void;
+  /** True if account creation is in progress */
+  isCreating?: boolean;
+  /** Error message from account creation */
+  createError?: string;
 }
 
 /**
@@ -53,9 +57,35 @@ export function AccountSearchStep({
   onUseAccount,
   onCreateNew,
   onPrevious,
+  isCreating = false,
+  createError,
 }: AccountSearchStepProps) {
   // State for tracking selected candidate when multiple results
   const [selectedCandidate, setSelectedCandidate] = useState<AccountCandidate | null>(null);
+
+  // ─── Creating State ─────────────────────────────────────────────────────────
+  if (status === 'creating' || isCreating) {
+    return (
+      <Card className="pl-1 border border-blue-200 dark:border-blue-900 ring-0">
+        <CardHeader>
+          <CardTitle>Création du compte...</CardTitle>
+          <CardDescription>
+            Création du compte dans Salesforce en cours
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-12">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">
+                Veuillez patienter...
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // ─── Searching State ────────────────────────────────────────────────────────
   if (status === 'searching') {
@@ -297,10 +327,19 @@ export function AccountSearchStep({
         <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30">
           <p className="text-sm text-amber-800 dark:text-amber-200">
             Les informations fournies ne correspondent à aucun compte existant
-            dans Salesforce. Vous pouvez créer un nouveau compte ou revenir en
-            arrière pour modifier les informations de recherche.
+            dans Salesforce. Vous pouvez créer un nouveau compte avec les
+            informations saisies ou revenir en arrière pour les modifier.
           </p>
         </div>
+
+        {/* Creation Error Message */}
+        {createError && (
+          <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950/30">
+            <p className="text-sm text-red-700 dark:text-red-300">
+              ❌ {createError}
+            </p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-col gap-3 sm:flex-row">

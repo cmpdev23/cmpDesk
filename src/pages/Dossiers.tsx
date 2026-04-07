@@ -102,6 +102,10 @@ function Dossiers() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<CreateDossierResult | null>(null);
 
+  // Account creation state
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [createAccountError, setCreateAccountError] = useState<string | undefined>();
+
   // ─── Validation Functions ─────────────────────────────────────────────────────
 
   /**
@@ -273,15 +277,51 @@ function Dossiers() {
   };
 
   /**
-   * Called when user chooses to create a new account
+   * Called when user chooses to create a new account.
+   * Creates the account in Salesforce and then proceeds to next step.
    */
-  const handleCreateNew = () => {
-    setAccountSearchState({
-      found: false,
-      // Will create new account on submit
-    });
-    console.log('Will create new account');
-    setCurrentStep('opportunity');
+  const handleCreateNew = async () => {
+    // Validate we have required data
+    if (!accountData.lastName) {
+      setCreateAccountError('Le nom de famille est requis pour créer un compte');
+      return;
+    }
+
+    setIsCreatingAccount(true);
+    setCreateAccountError(undefined);
+    console.log('Creating new account with:', accountData);
+
+    try {
+      const result = await window.electronAPI.salesforce.createAccount({
+        firstName: accountData.firstName || undefined,
+        lastName: accountData.lastName,
+        phone: accountData.phone || undefined,
+        email: accountData.email || undefined,
+      });
+
+      if (result.success && result.accountId) {
+        // Account created successfully
+        console.log('Account created:', result.accountId, result.accountName);
+        
+        setAccountSearchState({
+          found: true,
+          accountId: result.accountId,
+          accountName: result.accountName || `${accountData.firstName} ${accountData.lastName}`,
+          isNewAccount: true,
+        });
+        
+        setCurrentStep('opportunity');
+      } else {
+        // Creation failed
+        console.error('Account creation failed:', result.error);
+        setCreateAccountError(result.error || result.message || 'Erreur lors de la création du compte');
+      }
+    } catch (err) {
+      console.error('Account creation error:', err);
+      setCreateAccountError(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setIsCreatingAccount(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -421,6 +461,8 @@ function Dossiers() {
                 onUseAccount={handleUseAccount}
                 onCreateNew={handleCreateNew}
                 onPrevious={() => setCurrentStep('account')}
+                isCreating={isCreatingAccount}
+                createError={createAccountError}
               />
             )}
 

@@ -33,6 +33,28 @@ function register() {
     }
   });
 
+  // Create account
+  ipcMain.handle('salesforce:createAccount', async (_, params) => {
+    log.info('IPC', 'salesforce:createAccount called', {
+      firstName: params?.firstName,
+      lastName: params?.lastName,
+      hasPhone: !!params?.phone,
+      hasEmail: !!params?.email,
+    });
+    
+    try {
+      const result = await salesforceService.createAccount(params);
+      return result;
+    } catch (error) {
+      log.error('IPC', 'salesforce:createAccount error', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Erreur lors de la création du compte',
+      };
+    }
+  });
+
   // Create dossier (Opportunity + Case)
   ipcMain.handle('salesforce:createDossier', async (_, params) => {
     log.info('IPC', 'salesforce:createDossier called', {

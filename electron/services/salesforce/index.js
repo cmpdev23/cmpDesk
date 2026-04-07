@@ -11,6 +11,7 @@ const auraClient = require('./aura-client');
 const search = require('./search');
 const opportunity = require('./opportunity');
 const caseService = require('./case');
+const accountService = require('./account');
 
 // ============================================================================
 // STATE
@@ -300,6 +301,68 @@ async function searchAccount({ phone, email, firstName, lastName }) {
 }
 
 // ============================================================================
+// ACCOUNT CREATION
+// ============================================================================
+
+/**
+ * Create a new Account in Salesforce.
+ *
+ * Uses the data provided by the user during the search step.
+ * RecordTypeId is automatically set to FSC Individual.
+ *
+ * @param {Object} params - Account creation parameters
+ * @param {string} params.firstName - First name
+ * @param {string} params.lastName - Last name (required)
+ * @param {string} [params.phone] - Phone number (10 digits)
+ * @param {string} [params.email] - Email address
+ * @returns {Promise<CreateAccountResult>}
+ */
+async function createAccount({ firstName, lastName, phone, email }) {
+  log.info('SALESFORCE', 'Account creation initiated', { firstName, lastName });
+  
+  // Ensure we have a session
+  const { success, page } = await authService.ensureSession();
+  
+  if (!success || !page) {
+    return {
+      success: false,
+      error: 'Not authenticated',
+      message: 'Session Salesforce requise',
+    };
+  }
+  
+  // Get Aura credentials
+  const credentials = await getCredentials();
+  
+  if (!credentials) {
+    return {
+      success: false,
+      error: 'Failed to capture Aura credentials',
+      message: 'Impossible de capturer les credentials Aura',
+    };
+  }
+  
+  // Create the account
+  const result = await accountService.createAccount(page, credentials, {
+    firstName,
+    lastName,
+    phone,
+    email,
+  });
+  
+  if (result.success) {
+    log.info('SALESFORCE', 'Account created', {
+      accountId: result.accountId,
+      accountName: result.accountName,
+    });
+  } else {
+    log.error('SALESFORCE', 'Account creation failed', { error: result.error });
+  }
+  
+  return result;
+}
+
+// ============================================================================
 // DOSSIER CREATION (Opportunity + Case)
 // ============================================================================
 
@@ -440,6 +503,7 @@ module.exports = {
   
   // Account operations
   searchAccount,
+  createAccount,
   
   // Dossier operations
   createDossier,
@@ -449,4 +513,5 @@ module.exports = {
   search,
   opportunity,
   caseService,
+  accountService,
 };
