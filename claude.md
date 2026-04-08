@@ -509,6 +509,76 @@ Si le navigateur est déjà ouvert, seuls les fichiers JSON sont supprimés. Les
 
 ---
 
+## 🔧 Bugfix — Packaged App Blank Window & Zombie Processes (2026-04-08)
+
+### Problem 1: Blank Window
+
+**Symptom**: Packaged app (.exe) shows blank white window, no React UI renders. DevTools show "DID-FINISH-LOAD" success but nothing renders.
+
+**Root Cause**: `BrowserRouter` from react-router-dom uses HTML5 History API which requires a web server. In packaged Electron apps using `file://` protocol, BrowserRouter cannot resolve routes.
+
+**Solution**: Changed from `BrowserRouter` to `HashRouter` in `src/main.tsx`:
+```tsx
+// Before (broken in packaged app)
+import { BrowserRouter } from 'react-router-dom'
+<BrowserRouter><App /></BrowserRouter>
+
+// After (works with file:// protocol)
+import { HashRouter } from 'react-router-dom'
+<HashRouter><App /></HashRouter>
+```
+
+**Why HashRouter works**: Routes appear as `file:///.../index.html#/search` instead of `file:///.../search` (which would fail to resolve).
+
+**Additional fix**: Also removed HTML CSP header (`'self'` directive) as a precaution since it can cause issues with `file://` protocol in asar archives.
+
+### Problem 2: Zombie Processes
+
+**Symptom**: After closing app, 3-4 `cmpDesk.exe` processes remain in Task Manager.
+
+**Root Cause**: Playwright browser contexts launched for auth/search operations weren't tracked or closed when the app quit.
+
+**Solution**: Implemented global context tracking:
+```javascript
+// Track all Playwright contexts
+const activePlaywrightContexts = new Set();
+
+function trackPlaywrightContext(context) {
+  activePlaywrightContexts.add(context);
+}
+
+function closeTrackedContext(context) {
+  await context.close();
+  activePlaywrightContexts.delete(context);
+}
+
+// Clean up on app quit
+app.on('before-quit', async (event) => {
+  if (activePlaywrightContexts.size > 0) {
+    event.preventDefault();
+    await closeAllPlaywrightContexts();
+    app.quit();
+  }
+});
+```
+
+### Key Insights
+
+1. **BrowserRouter doesn't work with file:// protocol**: Use `HashRouter` in Electron packaged apps. BrowserRouter requires a server to handle routes.
+2. **CSP 'self' breaks in asar**: Don't use HTML CSP in Electron packaged apps. Use `webPreferences` instead.
+3. **Track all browser contexts**: Every `launchPersistentContext()` call must be tracked for cleanup.
+4. **`before-quit` is async-friendly**: Use `event.preventDefault()` to delay quit, clean up, then call `app.quit()`.
+5. **Test packaged builds early**: Dev mode (localhost:5173) works differently than packaged builds (file://). Test `.exe` locally before CI/CD.
+
+### Files Modified
+
+- `src/main.tsx` — Changed `BrowserRouter` to `HashRouter`
+- `index.html` — Removed CSP meta tag
+- `electron/main.js` — Added context tracking, `before-quit` handler, `trackPlaywrightContext()`, `closeTrackedContext()`, `closeAllPlaywrightContexts()`
+- `vite.config.ts` — Added `modulePreload.polyfill: false` to avoid crossorigin attribute issues
+
+---
+
 ## 🚫 Anti-patterns
 
 - **Don't construct aura.context manually** — capture from real requests
@@ -518,3 +588,6 @@ Si le navigateur est déjà ouvert, seuls les fichiers JSON sont supprimés. Les
 - **Don't use Escape/Tab on Flow modals** — Escape closes modal, Tab may trigger Next button
 - **IPC handlers in main.js, NOT modular** — `electron/ipc/` folder exists but main.js uses inline handlers. Add new IPC handlers directly in `main.js` after `salesforce:searchAccount`
 - **Don't delete browser_profile/ entirely for logout** — use surgical cookie removal to preserve form autofill
+- **Don't use BrowserRouter in Electron apps** — Use `HashRouter` instead. BrowserRouter requires HTML5 History API (server-side). file:// protocol doesn't support it. (2026-04-08)
+- **Don't use HTML CSP in Electron packaged apps** — `'self'` doesn't work with `file://` protocol in asar archives. Use `webPreferences` instead. (2026-04-08)
+- **Don't forget to track Playwright contexts** — Every `launchPersistentContext()` must be tracked for cleanup on app quit. (2026-04-08)

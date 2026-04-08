@@ -347,6 +347,7 @@ async function getAuthModule() {
           viewport: { width: 1280, height: 900 },
           args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
         });
+        trackPlaywrightContext(context); // Track for cleanup on app quit
       } catch (e) {
         if (e.message.includes('lock') || e.message.includes('already in use')) {
           log.warn('AUTH', 'Browser profile locked - another instance is open');
@@ -370,7 +371,7 @@ async function getAuthModule() {
       if (!needsAuth) {
         log.info('AUTH', 'Session already authenticated');
         await saveSessionState(context);
-        await context.close();
+        await closeTrackedContext(context);
         return { success: true, message: 'Session déjà authentifiée' };
       }
       
@@ -387,7 +388,7 @@ async function getAuthModule() {
         if (await hasAuthCookies(context)) {
           log.info('AUTH', 'Authentication successful!');
           await saveSessionState(context);
-          await context.close();
+          await closeTrackedContext(context);
           return { success: true, message: 'Connexion réussie!' };
         }
         await page.waitForTimeout(2000);
@@ -395,7 +396,7 @@ async function getAuthModule() {
       
       // Timeout
       log.error('AUTH', 'Authentication timeout');
-      await context.close();
+      await closeTrackedContext(context);
       return {
         success: false,
         error: 'AUTH_TIMEOUT',
@@ -465,6 +466,7 @@ async function getAuthModule() {
               headless: true,
               args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
             });
+            trackPlaywrightContext(context); // Track for cleanup
             
             // Get all cookies
             const allCookies = await context.cookies();
@@ -515,7 +517,7 @@ async function getAuthModule() {
               log.debug('AUTH', 'No auth cookies found to remove');
             }
             
-            await context.close();
+            await closeTrackedContext(context);
           } catch (browserErr) {
             // If browser profile is locked, we can't clear cookies surgically
             if (browserErr.message.includes('lock') || browserErr.message.includes('already in use')) {
@@ -654,6 +656,76 @@ class BrowserOperationMutex {
 
 // Global mutex instance for all browser operations
 const browserMutex = new BrowserOperationMutex();
+
+// Global tracker for active Playwright contexts (for cleanup on app quit)
+const activePlaywrightContexts = new Set();
+
+/**
+ * Register a Playwright context for cleanup tracking.
+ * Call this immediately after launching a persistent context.
+ */
+function trackPlaywrightContext(context) {
+  activePlaywrightContexts.add(context);
+  log.debug('CLEANUP', `Tracking Playwright context (total: ${activePlaywrightContexts.size})`);
+}
+
+/**
+ * Unregister a Playwright context after it's been closed.
+ */
+function untrackPlaywrightContext(context) {
+  activePlaywrightContexts.delete(context);
+  log.debug('CLEANUP', `Untracked Playwright context (remaining: ${activePlaywrightContexts.size})`);
+}
+
+/**
+ * Close all active Playwright contexts.
+ * Called on app before-quit to prevent zombie processes.
+ */
+async function closeAllPlaywrightContexts() {
+  if (activePlaywrightContexts.size === 0) return;
+  
+  log.info('CLEANUP', `Closing ${activePlaywrightContexts.size} active Playwright context(s)...`);
+  
+  const closePromises = [];
+  for (const context of activePlaywrightContexts) {
+    closePromises.push(
+      context.close()
+        .then(() => log.debug('CLEANUP', 'Context closed successfully'))
+        .catch(err => log.warn('CLEANUP', `Error closing context: ${err.message}`))
+    );
+  }
+  
+  await Promise.allSettled(closePromises);
+  activePlaywrightContexts.clear();
+  log.info('CLEANUP', 'All Playwright contexts closed');
+}
+
+/**
+ * Launch a tracked Playwright persistent context.
+ * Automatically registers for cleanup on app quit.
+ * @param {object} chromium - Playwright chromium instance
+ * @param {string} profilePath - Browser profile path
+ * @param {object} options - Launch options
+ * @returns {Promise<BrowserContext>} - Tracked browser context
+ */
+async function launchTrackedContext(chromium, profilePath, options) {
+  const context = await chromium.launchPersistentContext(profilePath, options);
+  trackPlaywrightContext(context);
+  return context;
+}
+
+/**
+ * Close a tracked context and unregister it.
+ * @param {BrowserContext} context - The context to close
+ */
+async function closeTrackedContext(context) {
+  if (!context) return;
+  try {
+    await context.close();
+  } finally {
+    untrackPlaywrightContext(context);
+  }
+}
 
 /**
  * Execute a browser operation with mutex protection.
@@ -888,6 +960,7 @@ async function searchAccount({ phone, email, firstName, lastName }) {
         viewport: { width: 1280, height: 900 },
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
       });
+      trackPlaywrightContext(context); // Track for cleanup on app quit
       
       // Restore cookies
       await restoreCookies(context);
@@ -916,7 +989,7 @@ async function searchAccount({ phone, email, firstName, lastName }) {
         
         if (!authenticated) {
           log.error('AURA', 'Authentication timeout - user did not complete login');
-          await context.close();
+          await closeTrackedContext(context);
           return {
             found: false,
             error: 'AUTH_TIMEOUT',
@@ -939,7 +1012,7 @@ async function searchAccount({ phone, email, firstName, lastName }) {
         
         if (!auraAvailable) {
           log.error('AURA', 'Aura still not available after authentication');
-          await context.close();
+          await closeTrackedContext(context);
           return {
             found: false,
             error: 'AURA_NOT_AVAILABLE',
@@ -1135,6 +1208,7 @@ async function createAccount({ firstName, lastName, phone, email }) {
         viewport: { width: 1280, height: 900 },
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
       });
+      trackPlaywrightContext(context); // Track for cleanup on app quit
       
       await restoreCookies(context);
       const page = context.pages()[0] || await context.newPage();
@@ -1375,6 +1449,7 @@ async function createDossier({ accountId, opportunityData, caseData }) {
         viewport: { width: 1280, height: 900 },
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
       });
+      trackPlaywrightContext(context); // Track for cleanup on app quit
       
       await restoreCookies(context);
       const page = context.pages()[0] || await context.newPage();
@@ -2114,6 +2189,7 @@ async function uploadDocuments({ caseId, files }) {
         viewport: { width: 1280, height: 900 },
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
       });
+      trackPlaywrightContext(context); // Track for cleanup on app quit
       
       await restoreCookies(context);
       const page = context.pages()[0] || await context.newPage();
@@ -2517,6 +2593,7 @@ async function createNote({ caseId, title, content }) {
         viewport: { width: 1280, height: 900 },
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
       });
+      trackPlaywrightContext(context); // Track for cleanup on app quit
       
       await restoreCookies(context);
       const page = context.pages()[0] || await context.newPage();
@@ -4292,4 +4369,19 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// Clean up Playwright contexts before quitting to prevent zombie processes
+app.on('before-quit', async (event) => {
+  if (activePlaywrightContexts.size > 0) {
+    log.info('SYSTEM', 'before-quit: Cleaning up Playwright contexts...');
+    event.preventDefault();
+    await closeAllPlaywrightContexts();
+    app.quit();
+  }
+});
+
+// Log when app is about to quit
+app.on('will-quit', () => {
+  log.info('SYSTEM', 'Application quitting');
 });

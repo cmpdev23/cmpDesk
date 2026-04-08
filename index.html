@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+    <!--
+      CSP is handled by Electron's webPreferences:
+      - contextIsolation: true (secure by default)
+      - nodeIntegration: false (no direct Node.js access)
+      - preload script pattern for IPC
+      
+      Removed HTML CSP because 'self' doesn't work correctly with file://
+      protocol in asar archives (causes blank window in packaged app).
+    -->
     <title>cmpDesk</title>
   </head>
   <body>

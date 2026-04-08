@@ -18,5 +18,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Disable crossorigin attribute on script/link tags
+    // It causes CORS issues with file:// protocol in packaged Electron apps
+    modulePreload: {
+      polyfill: false,
+    },
+  },
+  // Experimental: disable crossorigin attribute entirely
+  experimental: {
+    renderBuiltUrl(filename) {
+      // Return plain relative paths without crossorigin
+      return './' + filename;
+    },
   },
 })
