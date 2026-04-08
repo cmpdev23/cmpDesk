@@ -4255,6 +4255,43 @@ ipcMain.handle('app:getEnvConfig', () => {
   return ENV_CONFIG;
 });
 
+// Get app version
+ipcMain.handle('app:getVersion', async () => {
+  return app.getVersion();
+});
+
+// Check for updates
+ipcMain.handle('app:checkForUpdates', async () => {
+  try {
+    const updaterService = await import('./services/updater/index.js');
+    return await updaterService.checkForUpdates();
+  } catch (err) {
+    log.error('IPC', 'app:checkForUpdates error', err);
+    return { updateAvailable: false, error: err.message };
+  }
+});
+
+// Install update and restart
+ipcMain.handle('app:installUpdate', async () => {
+  try {
+    const updaterService = await import('./services/updater/index.js');
+    updaterService.installUpdate();
+  } catch (err) {
+    log.error('IPC', 'app:installUpdate error', err);
+    throw err;
+  }
+});
+
+// Get current update state
+ipcMain.handle('app:getUpdateState', async () => {
+  try {
+    const updaterService = await import('./services/updater/index.js');
+    return updaterService.getUpdateState();
+  } catch (err) {
+    return { updateDownloaded: false, updateInfo: null };
+  }
+});
+
 // ─── Salesforce ───────────────────────────────────────────────────────────────
 
 // Search for an account by phone, email, or name
