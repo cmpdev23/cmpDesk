@@ -5,59 +5,34 @@
  */
 
 import { Button } from "@/components/ui/button";
+import { AutomationGraphic } from "@/components/home/AutomationGraphic";
 
 function Home() {
   return (
-    <div className="max-w-2xl p-6">
-      {/* Titre principal */}
-      <h1 className="mb-2 text-3xl font-bold text-foreground">cmpDesk</h1>
+    <div className="max-w-4xl p-6 mx-auto">
+      {/* Hero Section */}
+      <div className="flex flex-col items-center mt-4 mb-12 text-center">
+        <h1 className="mb-4 text-4xl font-extrabold tracking-tight text-foreground">
+          Bienvenue sur cmpDesk
+        </h1>
+        <p className="max-w-xl mx-auto mb-8 text-lg text-muted-foreground">
+          L'application desktop local-first qui orchestre et automatise le
+          montage de vos dossiers d'assurance.
+        </p>
 
-      {/* Description */}
-      <p className="mb-8 text-muted-foreground">
-        Application desktop pour automatiser le montage de dossiers en
-        assurance.
-      </p>
-
-      {/* Status card */}
-      <div className="p-6 border rounded-lg bg-card border-border">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="w-2 h-2 rounded-full bg-chart-2"></span>
-          <h2 className="text-lg font-semibold text-card-foreground">
-            Structure initialisée
-          </h2>
+        {/* SVG Graphic Component */}
+        <div className="w-full mb-8">
+          <AutomationGraphic />
         </div>
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          <li className="flex items-center gap-2">
-            <span className="text-chart-2">✓</span>
-            Electron configuré
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-chart-2">✓</span>
-            React + Vite opérationnel
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-chart-2">✓</span>
-            Tailwind CSS actif
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-chart-2">✓</span>
-            Layout global en place
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-chart-2">✓</span>
-            React Router configuré
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-chart-2">✓</span>
-            Design System shadcn/ui
-          </li>
-        </ul>
-      </div>
 
-      {/* Quick actions */}
-      <div className="flex gap-3 mt-6">
-        <Button variant="default">Nouveau dossier</Button>
-        <Button variant="secondary">Paramètres</Button>
+        <div className="flex gap-4">
+          <Button variant="default" size="lg">
+            Nouveau dossier
+          </Button>
+          <Button variant="secondary" size="lg">
+            Voir les workflows
+          </Button>
+        </div>
       </div>
 
       {/* Version info */}
