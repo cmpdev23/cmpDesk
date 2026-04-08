@@ -101,7 +101,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "CMPlan",
+      "owner": "cmpdev23",
       "repo": "cmpDesk",
       "releaseType": "release"
     }
