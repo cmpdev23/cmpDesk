@@ -6,22 +6,41 @@
  * Internal files import directly from their relative paths.
  *
  * Usage:
- *   import { OpportunityFormStep1, OpportunityFormStep2, DEFAULT_STEP1_DATA } from '@/modules/dossiers';
+ *   import { OpportunityStep, CaseStep, DEFAULT_STEP1_DATA } from '@/modules/dossiers';
  */
 
-// Components
-export { OpportunityFormStepCompte } from './components/OpportunityFormStepCompte';
-export { AccountSearchStep } from './components/AccountSearchStep';
-export type { SearchStepStatus } from './components/AccountSearchStep';
-export { OpportunityFormStep1 } from './components/OpportunityFormStep1';
-export { OpportunityFormStep2 } from './components/OpportunityFormStep2';
-export { DocumentUploadStep, DEFAULT_DOCUMENT_UPLOAD_DATA } from './components/DocumentUploadStep';
-export type { DocumentUploadStepData, UploadedFile } from './components/DocumentUploadStep';
-export { NotesStep, DEFAULT_NOTES_DATA } from './components/NotesStep';
-export type { NotesStepData } from './components/NotesStep';
+// ─── Step Components ────────────────────────────────────────────────────────────
+// All form steps are in components/steps/ folder
+// Naming: {Domain}Step.tsx — describes WHAT the step handles, NOT its position
+
+export {
+  // Step 1 — Account Info
+  AccountInfoStep,
+  // Step 1.5 — Account Search Result (intermediate)
+  AccountSearchStep,
+  // Step 2 — Opportunity
+  OpportunityStep,
+  // Step 3 — Case
+  CaseStep,
+  // Step 4 — Documents
+  DocumentsStep,
+  DEFAULT_DOCUMENTS_DATA,
+  // Step 5 — Notes
+  NotesStep,
+  DEFAULT_NOTES_DATA,
+} from './components/steps';
+
+export type {
+  SearchStepStatus,
+  DocumentsStepData,
+  UploadedFile,
+  NotesStepData,
+} from './components/steps';
+
+// ─── Other Components ───────────────────────────────────────────────────────────
 export { DossierPageHeader } from './components/DossierPageHeader';
 
-// Types
+// ─── Types ──────────────────────────────────────────────────────────────────────
 export type {
   AccountStepData,
   AccountSearchState,
@@ -33,7 +52,7 @@ export type {
 } from './types';
 export { DEFAULT_ACCOUNT_DATA, DEFAULT_STEP1_DATA, DEFAULT_STEP2_DATA } from './types';
 
-// Picklists — Opportunity (Step 1)
+// ─── Picklists — Opportunity (Step 2) ───────────────────────────────────────────
 export {
   OPPORTUNITY_CATEGORY_OPTIONS,
   PRODUCT_INTEREST_OPTIONS,
@@ -42,7 +61,7 @@ export {
   getValueForLabel,
 } from './lib/picklists';
 
-// Picklists — Case (Step 2)
+// ─── Picklists — Case (Step 3) ──────────────────────────────────────────────────
 export {
   PRODUCT_FAMILY_OPTIONS,
   TRANSACTION_CATEGORY_OPTIONS,

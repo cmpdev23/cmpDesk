@@ -1,6 +1,6 @@
 /**
- * @file src/modules/dossiers/components/OpportunityFormStep2.tsx
- * @description Step 2 of the Opportunity creation form — Informations du dossier (Case)
+ * @file src/modules/dossiers/components/steps/CaseStep.tsx
+ * @description Step 3 — Case/Product family information (Informations du dossier)
  *
  * Fields included (from docs/Case.md):
  * - Product_Family__c (Famille de produit)
@@ -34,27 +34,27 @@ import {
   PRODUCT_TYPE_OPTIONS,
   PRODUCT_TYPE_BY_SIGNATURE,
   CUSTOMERS_PLACE_OF_RESIDENCE_OPTIONS,
-} from "../lib/picklists";
-import type { CaseStep2Data } from "../types";
+} from "../../lib/picklists";
+import type { CaseStep2Data } from "../../types";
 
-interface OpportunityFormStep2Props {
+interface CaseStepProps {
   data: CaseStep2Data;
   onChange: (data: CaseStep2Data) => void;
   errors?: Record<string, string>;
 }
 
 /**
- * Step 2 form component for Opportunity creation.
+ * Step 3 form component for Opportunity creation.
  * Handles "Informations du dossier (Case)" section.
  *
  * Features cascading picklists based on Salesforce field dependencies:
  * Product Family → Transaction Category → Sub-Category → Signature Type → Product Type
  */
-export function OpportunityFormStep2({
+export function CaseStep({
   data,
   onChange,
   errors = {},
-}: OpportunityFormStep2Props) {
+}: CaseStepProps) {
   // ─── Filtered Options (Cascading Dependencies) ────────────────────────────────
 
   /**
@@ -145,7 +145,7 @@ export function OpportunityFormStep2({
   return (
     <Card className="pl-1 border border-border ring-0">
       <CardHeader>
-        <CardTitle>Étape 2 — Informations du dossier</CardTitle>
+        <CardTitle>Étape 3 — Informations du dossier</CardTitle>
         <CardDescription>
           Définissez les paramètres de la transaction
         </CardDescription>

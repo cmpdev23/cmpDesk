@@ -1,6 +1,6 @@
 /**
- * @file src/modules/dossiers/components/OpportunityFormStep1.tsx
- * @description Step 2 of the Opportunity creation form — Informations générales
+ * @file src/modules/dossiers/components/steps/OpportunityStep.tsx
+ * @description Step 2 — Opportunity general information (Informations générales)
  *
  * Fields included (from docs/opportunity.md):
  * - Opportunity_Category__c (Catégorie de l'opportunité)
@@ -29,28 +29,28 @@ import {
   OPPORTUNITY_CATEGORY_OPTIONS,
   PRODUCT_INTEREST_OPTIONS,
   SUBSIDIARY_OPTIONS,
-} from "../lib/picklists";
-import type { OpportunityStep1Data } from "../types";
+} from "../../lib/picklists";
+import type { OpportunityStep1Data } from "../../types";
 
-interface OpportunityFormStep1Props {
+interface OpportunityStepProps {
   data: OpportunityStep1Data;
   onChange: (data: OpportunityStep1Data) => void;
   errors?: Record<string, string>;
 }
 
 /**
- * Step 1 form component for Opportunity creation.
+ * Step 2 form component for Opportunity creation.
  * Handles "Informations générales" section.
  *
  * Two handlers:
  * - handleInputChange  → DOM ChangeEvent (InputField)
  * - handleSelectChange → string value (SelectField / shadcn Radix)
  */
-export function OpportunityFormStep1({
+export function OpportunityStep({
   data,
   onChange,
   errors = {},
-}: OpportunityFormStep1Props) {
+}: OpportunityStepProps) {
   // Handler for shadcn Input (DOM ChangeEvent)
   // Special mirror: proposalNumber → contractNumber (one-way only)
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {

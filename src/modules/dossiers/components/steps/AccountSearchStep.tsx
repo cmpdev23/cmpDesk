@@ -1,6 +1,6 @@
 /**
- * @file src/modules/dossiers/components/AccountSearchStep.tsx
- * @description Intermediate step showing account search results
+ * @file src/modules/dossiers/components/steps/AccountSearchStep.tsx
+ * @description Step 1.5 — Intermediate step showing account search results
  *
  * This component is shown after the user fills in account info and clicks "Next".
  * It displays the search results and allows the user to:

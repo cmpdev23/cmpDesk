@@ -1,6 +1,6 @@
 /**
- * @file src/modules/dossiers/components/DocumentUploadStep.tsx
- * @description Step for document upload in the Opportunity creation form
+ * @file src/modules/dossiers/components/steps/DocumentsStep.tsx
+ * @description Step 4 — Document upload
  *
  * Allows users to upload documents related to the dossier.
  * 
@@ -75,13 +75,13 @@ export interface UploadedFile {
 /**
  * Document upload step data
  */
-export interface DocumentUploadStepData {
+export interface DocumentsStepData {
   files: UploadedFile[];
 }
 
-interface DocumentUploadStepProps {
-  data: DocumentUploadStepData;
-  onChange: (data: DocumentUploadStepData) => void;
+interface DocumentsStepProps {
+  data: DocumentsStepData;
+  onChange: (data: DocumentsStepData) => void;
   errors?: Record<string, string>;
 }
 
@@ -141,14 +141,14 @@ function generateFileId(): string {
 }
 
 /**
- * Document Upload Step component.
+ * Documents Step component.
  * Handles file upload via drag-and-drop or file picker.
  */
-export function DocumentUploadStep({
+export function DocumentsStep({
   data,
   onChange,
   errors = {},
-}: DocumentUploadStepProps) {
+}: DocumentsStepProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [rejectedFiles, setRejectedFiles] = useState<string[]>([]);
@@ -398,6 +398,6 @@ export function DocumentUploadStep({
 /**
  * Default data for document upload step
  */
-export const DEFAULT_DOCUMENT_UPLOAD_DATA: DocumentUploadStepData = {
+export const DEFAULT_DOCUMENTS_DATA: DocumentsStepData = {
   files: [],
 };

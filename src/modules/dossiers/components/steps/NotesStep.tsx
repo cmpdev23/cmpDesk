@@ -1,6 +1,6 @@
 /**
- * @file src/modules/dossiers/components/NotesStep.tsx
- * @description Step for adding notes in the Opportunity creation form
+ * @file src/modules/dossiers/components/steps/NotesStep.tsx
+ * @description Step 5 — Notes (free-text notes for the dossier)
  *
  * Allows users to add free-text notes related to the dossier.
  * This step comes after the document upload step.

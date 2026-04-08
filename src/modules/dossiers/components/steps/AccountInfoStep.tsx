@@ -1,6 +1,6 @@
 /**
- * @file src/modules/dossiers/components/OpportunityFormStepCompte.tsx
- * @description Step 1 of the Opportunity creation form — Infos Compte
+ * @file src/modules/dossiers/components/steps/AccountInfoStep.tsx
+ * @description Step 1 — Account contact information (Infos Compte)
  *
  * Features:
  * - Client contact information (firstName, lastName, phone, email)
@@ -19,9 +19,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { AccountStepData } from "../types";
+import type { AccountStepData } from "../../types";
 
-interface OpportunityFormStepCompteProps {
+interface AccountInfoStepProps {
   data: AccountStepData;
   onChange: (data: AccountStepData) => void;
   errors?: Record<string, string>;
@@ -32,11 +32,11 @@ interface OpportunityFormStepCompteProps {
  * Handles "Infos Compte" section — client contact information.
  * Search is triggered by the parent component when user clicks "Next".
  */
-export function OpportunityFormStepCompte({
+export function AccountInfoStep({
   data,
   onChange,
   errors = {},
-}: OpportunityFormStepCompteProps) {
+}: AccountInfoStepProps) {
   // Handler for shadcn Input (DOM ChangeEvent)
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

@@ -9,6 +9,8 @@
  * - Step 1.5: Account Search Result (intermediate - shows search result)
  * - Step 2: Informations générales (Opportunity)
  * - Step 3: Famille de produit (Case)
+ * - Step 4: Document upload
+ * - Step 5: Notes
  *
  * DEV MODE: Validation is bypassed — can navigate freely between steps.
  * AUTH REQUIRED: User must be connected to Salesforce to use the form.
@@ -21,16 +23,16 @@
 
 import { useState } from 'react';
 import {
-  OpportunityFormStepCompte,
+  AccountInfoStep,
   AccountSearchStep,
-  OpportunityFormStep1,
-  OpportunityFormStep2,
-  DocumentUploadStep,
+  OpportunityStep,
+  CaseStep,
+  DocumentsStep,
   NotesStep,
   DEFAULT_ACCOUNT_DATA,
   DEFAULT_STEP1_DATA,
   DEFAULT_STEP2_DATA,
-  DEFAULT_DOCUMENT_UPLOAD_DATA,
+  DEFAULT_DOCUMENTS_DATA,
   DEFAULT_NOTES_DATA,
   DossierPageHeader,
 } from '@/modules/dossiers';
@@ -39,7 +41,7 @@ import type {
   AccountSearchState,
   OpportunityStep1Data,
   CaseStep2Data,
-  DocumentUploadStepData,
+  DocumentsStepData,
   NotesStepData,
   SearchStepStatus,
 } from '@/modules/dossiers';
@@ -108,7 +110,7 @@ function Dossiers() {
   const [accountData, setAccountData] = useState<AccountStepData>(DEFAULT_ACCOUNT_DATA);
   const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
   const [step2Data, setStep2Data] = useState<CaseStep2Data>(DEFAULT_STEP2_DATA);
-  const [documentData, setDocumentData] = useState<DocumentUploadStepData>(DEFAULT_DOCUMENT_UPLOAD_DATA);
+  const [documentData, setDocumentData] = useState<DocumentsStepData>(DEFAULT_DOCUMENTS_DATA);
   const [notesData, setNotesData] = useState<NotesStepData>(DEFAULT_NOTES_DATA);
 
   // Account search state
@@ -623,7 +625,7 @@ function Dossiers() {
             
             {/* Step 1: Account Info Form */}
             {currentStep === 'account' && (
-              <OpportunityFormStepCompte
+              <AccountInfoStep
                 data={accountData}
                 onChange={handleAccountChange}
                 errors={accountErrors}
@@ -646,7 +648,7 @@ function Dossiers() {
 
             {/* Step 2: Opportunity Details */}
             {currentStep === 'opportunity' && (
-              <OpportunityFormStep1
+              <OpportunityStep
                 data={step1Data}
                 onChange={handleStep1Change}
                 errors={step1Errors}
@@ -655,7 +657,7 @@ function Dossiers() {
 
             {/* Step 3: Case/Product Family */}
             {currentStep === 'case' && (
-              <OpportunityFormStep2
+              <CaseStep
                 data={step2Data}
                 onChange={handleStep2Change}
                 errors={step2Errors}
@@ -664,7 +666,7 @@ function Dossiers() {
 
             {/* Step 4: Document Upload */}
             {currentStep === 'documents' && (
-              <DocumentUploadStep
+              <DocumentsStep
                 data={documentData}
                 onChange={setDocumentData}
               />
@@ -864,7 +866,7 @@ function Dossiers() {
                     setAccountData(DEFAULT_ACCOUNT_DATA);
                     setStep1Data(DEFAULT_STEP1_DATA);
                     setStep2Data(DEFAULT_STEP2_DATA);
-                    setDocumentData(DEFAULT_DOCUMENT_UPLOAD_DATA);
+                    setDocumentData(DEFAULT_DOCUMENTS_DATA);
                     setNotesData(DEFAULT_NOTES_DATA);
                     setAccountSearchState(null);
                     setSubmitResult(null);
