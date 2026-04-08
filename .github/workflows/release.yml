@@ -1,0 +1,63 @@
+# GitHub Actions workflow for cmpDesk releases
+# Phase 3 CI/CD - Automated release publication
+
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    
+    # Required for creating releases
+    permissions:
+      contents: write
+    
+    steps:
+      # 1. Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Install Playwright browsers (required for packaged app)
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      # 5. Build frontend (Vite)
+      - name: Build frontend
+        run: npm run build
+
+      # 6. Build and publish Electron application
+      - name: Build & Publish Electron (Windows)
+        run: npx electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Disable code signing for now (Phase 6)
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # 7. Upload build artifacts (backup)
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmpDesk-Windows-x64
+          path: |
+            build-output/*.exe
+            build-output/*.yml
+            build-output/*.blockmap
+          retention-days: 90
+          if-no-files-found: error

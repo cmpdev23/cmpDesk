@@ -96,6 +96,12 @@
     "linux": {
       "target": "AppImage",
       "category": "Office"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "CMPlan",
+      "repo": "cmpDesk",
+      "releaseType": "release"
     }
   }
 }
