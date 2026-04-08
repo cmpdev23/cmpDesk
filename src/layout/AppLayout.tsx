@@ -34,7 +34,8 @@ function AppLayout() {
   const [isDark, setIsDark] = useState<boolean>(true);
 
   useEffect(() => {
-    window.electronAPI.getEnvConfig()
+    window.electronAPI
+      .getEnvConfig()
       .then(setEnvConfig)
       .catch(() => {});
   }, []);
@@ -46,7 +47,7 @@ function AppLayout() {
       .catch(() => {});
 
     const unsubscribe = window.electronAPI.theme?.onChange(
-      ({ shouldUseDarkColors }) => setIsDark(shouldUseDarkColors)
+      ({ shouldUseDarkColors }) => setIsDark(shouldUseDarkColors),
     );
     return () => unsubscribe?.();
   }, []);
@@ -54,11 +55,13 @@ function AppLayout() {
   const isDevMode = envConfig?.ENV === "DEV";
 
   const isActive = (path: string) =>
-    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+    path === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(path);
 
   return (
     // `dark` class on root — drives all shadcn tokens
-    <div className={cn("h-full w-full", isDark && "dark")}>
+    <div className={cn("h-full w-full bg-background", isDark && "dark")}>
       {/*
         SidebarProvider normally uses min-h-svh but we override with h-full
         so it respects Electron's window bounds instead of viewport units.
@@ -134,7 +137,9 @@ function AppLayout() {
           {/* Topbar */}
           <header className="h-14 bg-card border-b border-border flex items-center px-4 shrink-0 gap-2">
             <SidebarTrigger />
-            <span className="ml-auto text-muted-foreground text-sm">v0.1.0</span>
+            <span className="ml-auto text-muted-foreground text-sm">
+              v0.1.0
+            </span>
           </header>
 
           {/*

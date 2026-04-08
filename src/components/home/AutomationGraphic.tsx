@@ -2,7 +2,7 @@ import React from "react";
 
 export const AutomationGraphic = () => {
   return (
-    <div className="relative w-full max-w-3xl max-h-60 mx-auto aspect-[2/1] overflow-hidden rounded-xl bg-card/20 shadow-sm flex items-center justify-center">
+    <div className="relative w-full max-w-3xl max-h-60 mx-auto aspect-[2/1] overflow-hidden rounded-xl bg-card/20  flex items-center justify-center">
       <svg
         viewBox="0 0 800 400"
         fill="none"
