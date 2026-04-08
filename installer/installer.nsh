@@ -1,23 +1,18 @@
 ; ============================================================================
 ; cmpDesk NSIS Installer Customization
 ; ============================================================================
-; Adds a custom page with checkbox for desktop shortcut selection.
 ; Compatible with electron-builder.
 ; ============================================================================
 
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
 
-; Variables for checkbox states
-Var CreateDesktopIcon
-Var DesktopIconCheckbox
-
 ; ============================================================================
 ; CUSTOM INSTALL MACRO
 ; ============================================================================
 
 !macro customInstall
-  ; Create desktop shortcut by default (standard behavior)
+  ; Create desktop shortcut
   CreateShortCut "$DESKTOP\cmpDesk.lnk" "$INSTDIR\cmpDesk.exe" "" "$INSTDIR\cmpDesk.exe" 0
   DetailPrint "Raccourci Bureau créé: $DESKTOP\cmpDesk.lnk"
   
