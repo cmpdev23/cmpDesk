@@ -18,7 +18,7 @@ import sys
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION — modifiez TARGET_PATH OU passez un argument CLI
 # ─────────────────────────────────────────────────────────────
-TARGET_PATH = "src\modules\dossiers"          # "" = racine du projet
+TARGET_PATH = r"src\modules\dossiers"          # "" = racine du projet
 # Exemples :
 # TARGET_PATH = "lib"
 # TARGET_PATH = "scripts"
