@@ -1,6 +1,6 @@
 {
   "name": "cmpdesk",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Application desktop pour automatiser le montage de dossiers en assurance",
   "author": "CMPlan",
   "private": true,

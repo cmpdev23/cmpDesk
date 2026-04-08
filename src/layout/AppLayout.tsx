@@ -107,7 +107,9 @@ function AppLayout() {
                   </SidebarMenuItem>
 
                   <SidebarMenuItem>
-                    <SidebarMenuButton disabled>Paramètres</SidebarMenuButton>
+                    <SidebarMenuButton asChild isActive={isActive("/settings")}>
+                      <NavLink to="/settings">Paramètres</NavLink>
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>

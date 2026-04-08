@@ -3,6 +3,7 @@ import AppLayout from './layout/AppLayout'
 import Home from './pages/Home'
 import Logs from './pages/Logs'
 import Dossiers from './pages/Dossiers'
+import Settings from './pages/Settings'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 /**
@@ -23,8 +24,7 @@ function App() {
           <Route index element={<Home />} />
           <Route path="dossiers" element={<Dossiers />} />
           <Route path="logs" element={<Logs />} />
-          {/* Futures routes ici */}
-          {/* <Route path="settings" element={<Settings />} /> */}
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </TooltipProvider>

@@ -4,12 +4,21 @@
  * Design System: shadcn/ui (radix-lyra preset)
  */
 
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AutomationGraphic } from "@/components/home/AutomationGraphic";
 
 function Home() {
   const navigate = useNavigate();
+  const [appVersion, setAppVersion] = useState<string>("...");
+
+  useEffect(() => {
+    window.electronAPI?.app
+      ?.getVersion()
+      .then((version) => setAppVersion(version))
+      .catch(() => setAppVersion("0.1.0"));
+  }, []);
   return (
     <div className="max-w-4xl p-6 mx-auto">
       {/* Hero Section */}
@@ -44,7 +53,7 @@ function Home() {
       {/* Version info */}
       <div className="pt-6 mt-8 border-t border-border">
         <p className="text-xs text-muted-foreground">
-          Version 0.1.0 • Base UI Foundation
+          Version {appVersion} • Base UI Foundation
         </p>
       </div>
     </div>

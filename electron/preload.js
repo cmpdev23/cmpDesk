@@ -319,7 +319,13 @@ const salesforceAPI = {
 // ============================================================================
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  ...appAPI,
+  // Legacy: keep platform and basic methods at root level for backward compat
+  platform: appAPI.platform,
+  getVersion: () => appAPI.getVersion(),
+  getUserDataPath: () => appAPI.getUserDataPath(),
+  getEnvConfig: () => appAPI.getEnvConfig(),
+  // New: nest all app methods under 'app' for consistent API
+  app: appAPI,
   auth: authAPI,
   logs: logsAPI,
   theme: themeAPI,
@@ -331,4 +337,4 @@ console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSessio
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
 console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier, uploadDocuments, createNote}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');
-console.log('   Available APIs: electronAPI.{getVersion, checkForUpdates, installUpdate, getUpdateState, onUpdateDownloaded}');
+console.log('   Available APIs: electronAPI.app.{getVersion, checkForUpdates, installUpdate, getUpdateState, onUpdateDownloaded}');
