@@ -3972,13 +3972,40 @@ async function searchBySOQL(page, credentials, field, value) {
 // WINDOW CONFIGURATION
 // ============================================================================
 
+/**
+ * Get the correct icon path - handles both dev and production.
+ * Called at window creation time when app is fully ready.
+ */
+function getIconPath() {
+  const possiblePaths = [
+    path.join(__dirname, '..', 'assets', 'logo.ico'),              // Dev: electron/../assets
+    path.join(__dirname, '..', 'assets', 'logo.png'),              // Dev fallback: PNG
+    path.join(process.resourcesPath || '', 'assets', 'logo.ico'),  // Prod: resources/assets
+    path.join(process.resourcesPath || '', 'assets', 'logo.png'),  // Prod fallback: PNG
+  ];
+  
+  for (const iconPath of possiblePaths) {
+    try {
+      if (fs.existsSync(iconPath)) {
+        console.log(`[ICON] Using icon from: ${iconPath}`);
+        return iconPath;
+      }
+    } catch (e) {
+      // Ignore access errors
+    }
+  }
+  
+  console.warn('[ICON] Icon file not found in any expected location');
+  return undefined;
+}
+
+// Base window config - icon is set dynamically in createWindow()
 const WINDOW_CONFIG = {
   width: 1200,
   height: 800,
   resizable: false,
   center: true,
   backgroundColor: '#0B0F14',
-  icon: path.join(__dirname, '..', 'assets', 'logo.ico'),
   webPreferences: {
     preload: path.join(__dirname, 'preload.js'),
     nodeIntegration: false,
@@ -4065,7 +4092,13 @@ function buildMenu() {
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow(WINDOW_CONFIG);
+  // Set icon dynamically at window creation time
+  const windowConfig = {
+    ...WINDOW_CONFIG,
+    icon: getIconPath(),
+  };
+  
+  mainWindow = new BrowserWindow(windowConfig);
 
   // Use app.isPackaged for reliable production detection
   // process.env.NODE_ENV is not set in packaged apps
@@ -4101,8 +4134,8 @@ function createWindow() {
     console.log('DID-FINISH-LOAD: Page loaded successfully');
   });
 
-  // DevTools controlled by SHOW_DEVTOOLS env variable OR always in packaged app for debugging
-  if (ENV_CONFIG.SHOW_DEVTOOLS || app.isPackaged) {
+  // DevTools controlled by SHOW_DEVTOOLS env variable (set SHOW_DEVTOOLS=true in .env to enable)
+  if (ENV_CONFIG.SHOW_DEVTOOLS) {
     mainWindow.webContents.openDevTools();
     log.debug('SYSTEM', 'DevTools opened');
   }

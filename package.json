@@ -87,9 +87,18 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "allowElevation": true,
+      "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
-      "shortcutName": "cmpDesk"
+      "shortcutName": "cmpDesk",
+      "runAfterFinish": true,
+      "include": "installer/installer.nsh",
+      "installerIcon": "assets/logo.ico",
+      "uninstallerIcon": "assets/logo.ico",
+      "installerHeaderIcon": "assets/logo.ico",
+      "deleteAppDataOnUninstall": false,
+      "menuCategory": true,
+      "license": null
     },
     "mac": {
       "target": "dmg",
