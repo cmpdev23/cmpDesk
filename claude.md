@@ -592,3 +592,114 @@ app.on('before-quit', async (event) => {
 - **Don't use HTML CSP in Electron packaged apps** — `'self'` doesn't work with `file://` protocol in asar archives. Use `webPreferences` instead. (2026-04-08)
 - **Don't forget to track Playwright contexts** — Every `launchPersistentContext()` must be tracked for cleanup on app quit. (2026-04-08)
 - **Don't hardcode GitHub org in electron-builder publish config** — Owner must match actual repo (`cmpdev23` not `CMPlan`). Error 404 from GitHub API = wrong owner/repo or bad permissions. (2026-04-08)
+
+---
+
+## 🔄 Auto-Update Implementation (2026-04-08)
+
+### Architecture
+
+```
+electron/
+├── main.js                      # Initializes updater on app.whenReady()
+├── preload.js                   # Exposes app update API to renderer
+├── ipc/app.js                   # IPC handlers for update operations
+└── services/updater/index.js    # Core updater service (ESM module)
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `electron/services/updater/index.js` | Core auto-update logic using electron-updater |
+| `electron/ipc/app.js` | IPC handlers: `app:getVersion`, `app:checkForUpdates`, `app:installUpdate`, `app:getUpdateState` |
+| `electron/preload.js` | Exposes: `getVersion`, `checkForUpdates`, `installUpdate`, `getUpdateState`, `onUpdateDownloaded` |
+
+### API Usage (Renderer)
+
+```typescript
+// Check for updates
+const result = await window.electronAPI.checkForUpdates();
+// { updateAvailable: boolean, info?: { version, releaseDate, releaseNotes } }
+
+// Install downloaded update (restarts app)
+await window.electronAPI.installUpdate();
+
+// Get current update state
+const state = await window.electronAPI.getUpdateState();
+// { updateDownloaded: boolean, updateInfo: object | null }
+
+// Listen for update-downloaded events
+const unsubscribe = window.electronAPI.onUpdateDownloaded((info) => {
+  console.log(`Update ready: v${info.version}`);
+});
+```
+
+### Important Notes
+
+1. **Dev Mode Behavior**: All updater functions return early with `{ updateAvailable: false }` when `!app.isPackaged`. No errors, just silent skip.
+
+2. **ESM/CommonJS Compatibility**:
+   - `main.js` uses ESM imports
+   - `ipc/app.js` uses CommonJS (require)
+   - `services/updater/index.js` uses ESM (export)
+   - Solution: Lazy-load ESM module with `await import()` in CommonJS handlers
+
+3. **Periodic Checks**: Default interval is 4 hours. Can be customized via `startPeriodicCheck(intervalMs)`.
+
+4. **Error Handling**: Update errors are logged but don't crash the app. Next check will retry automatically.
+
+5. **Install Behavior**: `installUpdate()` calls `autoUpdater.quitAndInstall(true, true)` which:
+   - Silently installs (no NSIS UI)
+   - Auto-restarts app after install
+
+### React UI Components (Task 2 - 2026-04-08)
+
+#### Files Created
+
+- `src/hooks/use-app-update.ts` — Custom hook for update state management
+- `src/components/ui/update-banner.tsx` — Notification banner component
+
+#### Files Modified
+
+- `src/types/electron.d.ts` — Added `UpdateInfo`, `AppAPI` types
+- `src/layout/AppLayout.tsx` — Integrated UpdateBanner, dynamic version display
+
+#### Hook API (`useAppUpdate`)
+
+```typescript
+const {
+  updateAvailable,    // boolean - true when update downloaded
+  updateInfo,         // { version, releaseDate?, releaseNotes? } | null
+  isChecking,         // boolean - true during manual check
+  error,              // string | null
+  checkForUpdates,    // () => Promise<void> - manual trigger
+  installUpdate,      // () => Promise<void> - install and restart
+  dismissUpdate,      // () => void - hide banner
+} = useAppUpdate();
+```
+
+#### Banner Behavior
+
+- Auto-shows when update is downloaded (via IPC listener)
+- "Restart now" → calls `installUpdate()` → app quits and restarts
+- "Later" → calls `dismissUpdate()` → banner hides, update installs on next quit
+- Dev mode: banner never appears (no updates in dev)
+
+#### TypeScript Types Added
+
+```typescript
+interface UpdateInfo {
+  version: string;
+  releaseDate?: string;
+  releaseNotes?: string;
+}
+
+interface AppAPI {
+  getVersion: () => Promise<string>;
+  checkForUpdates: () => Promise<CheckUpdateResult>;
+  installUpdate: () => Promise<void>;
+  getUpdateState: () => Promise<UpdateState>;
+  onUpdateDownloaded: (callback: (info: UpdateInfo) => void) => () => void;
+}
+```

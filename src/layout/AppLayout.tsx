@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { AuthStatus } from "../components/sidebar/AuthStatus";
+import { UpdateBanner } from "@/components/ui/update-banner";
 import { cn } from "@/lib/utils";
 import type { EnvConfig } from "../types/electron";
 import {
@@ -32,11 +33,18 @@ function AppLayout() {
   const location = useLocation();
   const [envConfig, setEnvConfig] = useState<EnvConfig | null>(null);
   const [isDark, setIsDark] = useState<boolean>(true);
+  const [appVersion, setAppVersion] = useState<string>("0.1.0");
 
   useEffect(() => {
     window.electronAPI
       .getEnvConfig()
       .then(setEnvConfig)
+      .catch(() => {});
+
+    // Get app version from Electron
+    window.electronAPI?.app
+      ?.getVersion()
+      .then((version) => setAppVersion(version))
       .catch(() => {});
   }, []);
 
@@ -134,11 +142,14 @@ function AppLayout() {
           We make it flex-col so topbar + content stack correctly.
         */}
         <SidebarInset className="flex flex-col h-full overflow-hidden">
+          {/* Update Banner - self-managed visibility */}
+          <UpdateBanner />
+
           {/* Topbar */}
           <header className="h-14 bg-card border-b border-border flex items-center px-4 shrink-0 gap-2">
             <SidebarTrigger />
             <span className="ml-auto text-muted-foreground text-sm">
-              v0.1.0
+              v{appVersion}
             </span>
           </header>
 

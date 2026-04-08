@@ -4382,7 +4382,7 @@ ipcMain.handle('logs:add', (event, { level, scope, message, data }) => {
 // APP LIFECYCLE
 // ============================================================================
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   log.info('SYSTEM', 'App ready', {
     version: app.getVersion(),
     userData: app.getPath('userData'),
@@ -4390,6 +4390,30 @@ app.whenReady().then(() => {
   });
   
   createWindow();
+
+  // ─── Auto-Update Initialization ───
+  // Initialize updater after window is created (only works in packaged app)
+  try {
+    const updaterService = await import('./services/updater/index.js');
+    
+    // Initialize with main window reference for IPC
+    updaterService.initializeUpdater(mainWindow);
+    
+    // Start periodic update checks (every 4 hours)
+    updaterService.startPeriodicCheck();
+    
+    // Perform initial update check
+    updaterService.checkForUpdates().then(result => {
+      if (result.updateAvailable) {
+        log.info('UPDATER', `Update available: v${result.info?.version}`);
+      }
+    }).catch(err => {
+      log.debug('UPDATER', 'Initial update check failed (non-critical)', err.message);
+    });
+  } catch (err) {
+    // Non-critical - updater failure shouldn't prevent app from working
+    log.debug('UPDATER', 'Could not initialize updater (may be in dev mode)', err.message);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

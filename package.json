@@ -1,6 +1,6 @@
 {
   "name": "cmpdesk",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Application desktop pour automatiser le montage de dossiers en assurance",
   "author": "CMPlan",
   "private": true,
@@ -20,6 +20,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.4.0",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^1.7.0",
     "playwright": "^1.59.1",
     "radix-ui": "^1.4.3",

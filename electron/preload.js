@@ -81,9 +81,10 @@ const appAPI = {
   platform: process.platform,
   
   /**
-   * Get the app version.
+   * Get the app version from main process.
+   * @returns {Promise<string>}
    */
-  getVersion: () => '0.1.0',
+  getVersion: () => ipcRenderer.invoke('app:getVersion'),
   
   /**
    * Get user data path (for debugging).
@@ -95,6 +96,40 @@ const appAPI = {
    * @returns {Promise<{ ENV: string, DEBUG_LOGS: boolean, SHOW_DEVTOOLS: boolean, LOG_LEVEL: string }>}
    */
   getEnvConfig: () => ipcRenderer.invoke('app:getEnvConfig'),
+  
+  // ─── Auto-Update API ───
+  
+  /**
+   * Check for updates.
+   * Returns immediately with no update in dev mode.
+   * @returns {Promise<{ updateAvailable: boolean, info?: UpdateInfo, error?: string }>}
+   */
+  checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
+  
+  /**
+   * Install the downloaded update and restart the app.
+   * Only works if an update has been downloaded.
+   * @returns {Promise<void>}
+   */
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
+  
+  /**
+   * Get current update state.
+   * @returns {Promise<{ updateDownloaded: boolean, updateInfo: UpdateInfo | null }>}
+   */
+  getUpdateState: () => ipcRenderer.invoke('app:getUpdateState'),
+  
+  /**
+   * Subscribe to update-downloaded events.
+   * Called when an update has been downloaded and is ready to install.
+   * @param {(info: UpdateInfo) => void} callback - Handler for update info
+   * @returns {() => void} Unsubscribe function
+   */
+  onUpdateDownloaded: (callback) => {
+    const handler = (event, info) => callback(info);
+    ipcRenderer.on('app:update-downloaded', handler);
+    return () => ipcRenderer.removeListener('app:update-downloaded', handler);
+  },
 };
 
 // ============================================================================
@@ -296,3 +331,4 @@ console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSessio
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
 console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier, uploadDocuments, createNote}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');
+console.log('   Available APIs: electronAPI.{getVersion, checkForUpdates, installUpdate, getUpdateState, onUpdateDownloaded}');

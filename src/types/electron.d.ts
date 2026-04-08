@@ -345,6 +345,50 @@ export interface SalesforceAPI {
 }
 
 // ============================================================================
+// APP UPDATE API
+// ============================================================================
+
+/** Information about an available update */
+export interface UpdateInfo {
+  /** New version string (e.g., "1.2.0") */
+  version: string;
+  /** Release date in ISO format */
+  releaseDate?: string;
+  /** Release notes (markdown or plain text) */
+  releaseNotes?: string;
+}
+
+/** Result from checking for updates */
+export interface CheckUpdateResult {
+  /** Whether an update is available */
+  updateAvailable: boolean;
+  /** Update info if available */
+  info?: UpdateInfo;
+}
+
+/** Current update state */
+export interface UpdateState {
+  /** Whether an update has been downloaded and is ready to install */
+  updateDownloaded: boolean;
+  /** Info about the downloaded update */
+  updateInfo?: UpdateInfo;
+}
+
+/** App update API exposed via preload */
+export interface AppAPI {
+  /** Get current app version */
+  getVersion: () => Promise<string>;
+  /** Check for updates manually */
+  checkForUpdates: () => Promise<CheckUpdateResult>;
+  /** Install downloaded update and restart */
+  installUpdate: () => Promise<void>;
+  /** Get current update state */
+  getUpdateState: () => Promise<UpdateState>;
+  /** Subscribe to update-downloaded event */
+  onUpdateDownloaded: (callback: (info: UpdateInfo) => void) => () => void;
+}
+
+// ============================================================================
 // ELECTRON API
 // ============================================================================
 
@@ -357,6 +401,8 @@ export interface ElectronAPI {
   logs: LogsAPI;
   theme: ThemeAPI;
   salesforce: SalesforceAPI;
+  /** App update API - check for updates, install, etc. */
+  app: AppAPI;
 }
 
 declare global {
