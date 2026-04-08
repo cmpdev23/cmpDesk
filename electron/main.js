@@ -3978,6 +3978,7 @@ const WINDOW_CONFIG = {
   resizable: false,
   center: true,
   backgroundColor: '#0B0F14',
+  icon: path.join(__dirname, '..', 'assets', 'logo.ico'),
   webPreferences: {
     preload: path.join(__dirname, 'preload.js'),
     nodeIntegration: false,
