@@ -4,10 +4,12 @@
  * Design System: shadcn/ui (radix-lyra preset)
  */
 
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AutomationGraphic } from "@/components/home/AutomationGraphic";
 
 function Home() {
+  const navigate = useNavigate();
   return (
     <div className="max-w-4xl p-6 mx-auto">
       {/* Hero Section */}
@@ -26,7 +28,11 @@ function Home() {
         </div>
 
         <div className="flex gap-4">
-          <Button variant="default" size="lg">
+          <Button
+            variant="default"
+            size="lg"
+            onClick={() => navigate("/dossiers")}
+          >
             Nouveau dossier
           </Button>
           <Button variant="secondary" size="lg">
