@@ -4,8 +4,14 @@ Script to generate a valid .ico file for Electron Builder.
 Electron Builder requires icons to be at least 256x256 pixels.
 
 This script:
-1. Creates a professional-looking logo if no source exists
+1. Creates a professional-looking logo matching the Figma design
 2. Generates a .ico with all required sizes (16, 24, 32, 48, 64, 128, 256)
+
+Design: Circular icon with:
+- Dark gray outer ring border
+- White middle ring
+- Purple/indigo inner circle fill
+- "DESK" text in bold italic black
 
 Usage:
     python scripts/generate_icon.py
@@ -25,11 +31,22 @@ ASSETS_DIR = Path(__file__).parent.parent / "assets"
 OUTPUT_ICO = ASSETS_DIR / "logo.ico"
 OUTPUT_PNG = ASSETS_DIR / "logo.png"
 
+# Design colors (from Figma)
+OUTER_RING_COLOR = (55, 55, 60)         # Dark gray/charcoal
+WHITE_RING_COLOR = (255, 255, 255)       # White
+INNER_CIRCLE_COLOR = (88, 101, 242)      # Purple/Indigo (#5865F2)
+TEXT_COLOR = (45, 45, 50)                # Dark text color
+
 
 def create_logo_image(size: int = 512) -> Image.Image:
     """
-    Create a professional logo for cmpDesk.
-    Uses a modern gradient-style design with 'CM' initials.
+    Create the cmpDesk logo matching the Figma design.
+    
+    Design structure:
+    - Outer dark gray ring (border)
+    - White ring (middle layer)
+    - Purple/indigo filled circle (inner)
+    - "DESK" text in bold italic black
     
     Args:
         size: Base size for the logo (will be resized as needed)
@@ -41,46 +58,38 @@ def create_logo_image(size: int = 512) -> Image.Image:
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
-    # Colors - Modern blue gradient feel
-    primary_color = (59, 130, 246)      # Blue-500
-    secondary_color = (37, 99, 235)     # Blue-600
-    accent_color = (255, 255, 255)      # White
+    # Calculate ring dimensions
+    center = size // 2
     
-    # Draw rounded rectangle background
-    padding = size // 10
-    corner_radius = size // 5
-    
-    # Create rounded rectangle
-    draw_rounded_rectangle(
-        draw, 
-        (padding, padding, size - padding, size - padding),
-        corner_radius,
-        primary_color
+    # Outer ring (dark gray) - full circle
+    outer_radius = size // 2 - 2
+    draw.ellipse(
+        [center - outer_radius, center - outer_radius,
+         center + outer_radius, center + outer_radius],
+        fill=OUTER_RING_COLOR
     )
     
-    # Draw inner accent (subtle gradient effect simulation)
-    inner_padding = size // 6
-    inner_radius = size // 6
-    draw_rounded_rectangle(
-        draw,
-        (inner_padding, inner_padding, size - inner_padding, size // 2 + inner_padding),
-        inner_radius,
-        secondary_color
+    # White ring (middle layer)
+    white_ring_radius = int(outer_radius * 0.92)
+    draw.ellipse(
+        [center - white_ring_radius, center - white_ring_radius,
+         center + white_ring_radius, center + white_ring_radius],
+        fill=WHITE_RING_COLOR
     )
     
-    # Draw "CM" text
-    text = "CM"
-    font_size = size // 2
+    # Inner purple circle
+    inner_radius = int(outer_radius * 0.82)
+    draw.ellipse(
+        [center - inner_radius, center - inner_radius,
+         center + inner_radius, center + inner_radius],
+        fill=INNER_CIRCLE_COLOR
+    )
     
-    try:
-        # Try to use a nice font if available
-        font = ImageFont.truetype("arial.ttf", font_size)
-    except (OSError, IOError):
-        try:
-            font = ImageFont.truetype("Arial", font_size)
-        except (OSError, IOError):
-            # Fallback to default font
-            font = ImageFont.load_default()
+    # Draw "DESK" text
+    text = "DESK"
+    font_size = int(size * 0.28)
+    
+    font = _get_bold_italic_font(font_size)
     
     # Calculate text position (centered)
     bbox = draw.textbbox((0, 0), text, font=font)
@@ -90,35 +99,43 @@ def create_logo_image(size: int = 512) -> Image.Image:
     x = (size - text_width) // 2
     y = (size - text_height) // 2 - bbox[1]  # Adjust for font baseline
     
-    # Draw text with slight shadow for depth
-    shadow_offset = size // 50
-    draw.text((x + shadow_offset, y + shadow_offset), text, fill=(0, 0, 0, 80), font=font)
-    draw.text((x, y), text, fill=accent_color, font=font)
+    # Draw text
+    draw.text((x, y), text, fill=TEXT_COLOR, font=font)
     
     return img
 
 
-def draw_rounded_rectangle(draw: ImageDraw.Draw, coords: tuple, radius: int, fill: tuple):
+def _get_bold_italic_font(font_size: int) -> ImageFont.FreeTypeFont:
     """
-    Draw a rounded rectangle.
+    Get a bold italic font for the logo text.
+    Tries multiple font options for cross-platform compatibility.
     
     Args:
-        draw: ImageDraw object
-        coords: (x1, y1, x2, y2) coordinates
-        radius: Corner radius
-        fill: Fill color tuple
+        font_size: Desired font size
+    
+    Returns:
+        PIL ImageFont object
     """
-    x1, y1, x2, y2 = coords
+    # Font candidates in order of preference (bold italic)
+    font_candidates = [
+        "arialbi.ttf",          # Arial Bold Italic (Windows)
+        "Arial Bold Italic.ttf",
+        "Arial-BoldItalicMT",   # macOS
+        "DejaVuSans-BoldOblique.ttf",  # Linux
+        "arialbd.ttf",          # Arial Bold (fallback)
+        "Arial Bold.ttf",
+        "arial.ttf",            # Arial Regular (fallback)
+        "Arial.ttf",
+    ]
     
-    # Draw main rectangle
-    draw.rectangle([x1 + radius, y1, x2 - radius, y2], fill=fill)
-    draw.rectangle([x1, y1 + radius, x2, y2 - radius], fill=fill)
+    for font_name in font_candidates:
+        try:
+            return ImageFont.truetype(font_name, font_size)
+        except (OSError, IOError):
+            continue
     
-    # Draw corners
-    draw.pieslice([x1, y1, x1 + radius * 2, y1 + radius * 2], 180, 270, fill=fill)
-    draw.pieslice([x2 - radius * 2, y1, x2, y1 + radius * 2], 270, 360, fill=fill)
-    draw.pieslice([x1, y2 - radius * 2, x1 + radius * 2, y2], 90, 180, fill=fill)
-    draw.pieslice([x2 - radius * 2, y2 - radius * 2, x2, y2], 0, 90, fill=fill)
+    # Final fallback to default font
+    return ImageFont.load_default()
 
 
 def resize_for_ico(img: Image.Image, sizes: list[int]) -> list[Image.Image]:
