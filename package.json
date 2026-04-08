@@ -2,6 +2,7 @@
   "name": "cmpdesk",
   "version": "0.1.0",
   "description": "Application desktop pour automatiser le montage de dossiers en assurance",
+  "author": "CMPlan",
   "private": true,
   "main": "electron/main.js",
   "type": "module",
@@ -47,23 +48,53 @@
   "build": {
     "appId": "com.cmpdesk.app",
     "productName": "cmpDesk",
-    "icon": "assets/logo.png",
     "directories": {
-      "output": "dist-electron"
+      "output": "build-output",
+      "buildResources": "assets"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "!**/*.map",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,readme}",
+      "!**/node_modules/.cache/**"
+    ],
+    "extraResources": [
+      {
+        "from": ".env.example",
+        "to": ".env.example"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/playwright/**",
+      "**/node_modules/playwright-core/**"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "cmpDesk"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "category": "public.app-category.business"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "category": "Office"
     }
   }
 }

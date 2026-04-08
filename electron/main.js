@@ -3989,18 +3989,44 @@ function buildMenu() {
 function createWindow() {
   mainWindow = new BrowserWindow(WINDOW_CONFIG);
 
-  const isDev = process.env.NODE_ENV !== 'production';
-  
+  // Use app.isPackaged for reliable production detection
+  // process.env.NODE_ENV is not set in packaged apps
+  const isDev = !app.isPackaged;
+
+  log.info('SYSTEM', 'Creating window', {
+    isDev,
+    isPackaged: app.isPackaged,
+    dirname: __dirname,
+    appPath: app.getAppPath()
+  });
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+    log.info('SYSTEM', 'Loading production file', { indexPath });
+    mainWindow.loadFile(indexPath).catch(err => {
+      log.error('SYSTEM', 'Failed to load index.html', err);
+      console.error('LOAD ERROR:', err);
+    });
   }
   
-  // DevTools controlled by SHOW_DEVTOOLS env variable
-  if (ENV_CONFIG.SHOW_DEVTOOLS) {
+  // Log any page load errors
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    log.error('SYSTEM', 'Page failed to load', { errorCode, errorDescription, validatedURL });
+    console.error('DID-FAIL-LOAD:', errorCode, errorDescription, validatedURL);
+  });
+
+  // Log when page finishes loading
+  mainWindow.webContents.on('did-finish-load', () => {
+    log.info('SYSTEM', 'Page finished loading');
+    console.log('DID-FINISH-LOAD: Page loaded successfully');
+  });
+
+  // DevTools controlled by SHOW_DEVTOOLS env variable OR always in packaged app for debugging
+  if (ENV_CONFIG.SHOW_DEVTOOLS || app.isPackaged) {
     mainWindow.webContents.openDevTools();
-    log.debug('SYSTEM', 'DevTools opened (SHOW_DEVTOOLS=true)');
+    log.debug('SYSTEM', 'DevTools opened');
   }
 
   // Build the native menu with View > Theme

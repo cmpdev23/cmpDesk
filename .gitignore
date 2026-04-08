@@ -68,3 +68,5 @@ model/
 note.txt
 test/
 branch_doc/
+build-output/
+release/
