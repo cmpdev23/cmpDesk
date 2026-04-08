@@ -46,7 +46,8 @@ jobs:
       - name: Build & Publish Electron (Windows)
         run: npx electron-builder --win --x64 --publish always
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Use built-in GITHUB_TOKEN (no need for custom PAT)
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Disable code signing for now (Phase 6)
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
