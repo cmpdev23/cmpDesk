@@ -21,7 +21,7 @@
  * @see docs/Case.md - Case field documentation
  */
 
-import { useState } from 'react';
+import { useState } from "react";
 import {
   AccountInfoStep,
   AccountSearchStep,
@@ -35,7 +35,7 @@ import {
   DEFAULT_DOCUMENTS_DATA,
   DEFAULT_NOTES_DATA,
   DossierPageHeader,
-} from '@/modules/dossiers';
+} from "@/modules/dossiers";
 import type {
   AccountStepData,
   AccountSearchState,
@@ -44,20 +44,25 @@ import type {
   DocumentsStepData,
   NotesStepData,
   SearchStepStatus,
-} from '@/modules/dossiers';
-import type { AccountSearchResult, CreateDossierResult, UploadDocumentsResult, CreateNoteResult } from '@/types/electron';
-import { Button } from '@/components/ui/button';
+} from "@/modules/dossiers";
+import type {
+  AccountSearchResult,
+  CreateDossierResult,
+  UploadDocumentsResult,
+  CreateNoteResult,
+} from "@/types/electron";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useDevMode } from '@/hooks/use-dev-mode';
-import { useAuthStatus } from '@/hooks/use-auth-status';
-import { AuthRequired } from '@/components/ui/auth-required';
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDevMode } from "@/hooks/use-dev-mode";
+import { useAuthStatus } from "@/hooks/use-auth-status";
+import { AuthRequired } from "@/components/ui/auth-required";
 
 /**
  * Form step types for the workflow
@@ -68,23 +73,29 @@ import { AuthRequired } from '@/components/ui/auth-required';
  * - 'documents': Step 4 - Document upload
  * - 'notes': Step 5 - Notes
  */
-type FormStep = 'account' | 'search-result' | 'opportunity' | 'case' | 'documents' | 'notes';
+type FormStep =
+  | "account"
+  | "search-result"
+  | "opportunity"
+  | "case"
+  | "documents"
+  | "notes";
 
 /**
  * Get display step number for header (1, 2, 3, 4, or 5)
  */
 function getDisplayStep(step: FormStep): number {
   switch (step) {
-    case 'account':
-    case 'search-result':
+    case "account":
+    case "search-result":
       return 1;
-    case 'opportunity':
+    case "opportunity":
       return 2;
-    case 'case':
+    case "case":
       return 3;
-    case 'documents':
+    case "documents":
       return 4;
-    case 'notes':
+    case "notes":
       return 5;
   }
 }
@@ -94,47 +105,67 @@ function getDisplayStep(step: FormStep): number {
  */
 function Dossiers() {
   // DEV mode hook - for validation bypass and debug features
-  const { isDevMode, shouldBypassValidation, shouldEnableNextButton } = useDevMode();
+  const { isDevMode, shouldBypassValidation, shouldEnableNextButton } =
+    useDevMode();
 
   // Auth status hook - checks if user is connected to Salesforce
-  const { isConnected, isChecking, refresh: refreshAuthStatus } = useAuthStatus();
+  const {
+    isConnected,
+    isChecking,
+    refresh: refreshAuthStatus,
+  } = useAuthStatus();
 
   // Login state (for handling login from this page)
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Current step navigation
-  const [currentStep, setCurrentStep] = useState<FormStep>('account');
+  const [currentStep, setCurrentStep] = useState<FormStep>("account");
 
   // Form data state
-  const [accountData, setAccountData] = useState<AccountStepData>(DEFAULT_ACCOUNT_DATA);
-  const [step1Data, setStep1Data] = useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
+  const [accountData, setAccountData] =
+    useState<AccountStepData>(DEFAULT_ACCOUNT_DATA);
+  const [step1Data, setStep1Data] =
+    useState<OpportunityStep1Data>(DEFAULT_STEP1_DATA);
   const [step2Data, setStep2Data] = useState<CaseStep2Data>(DEFAULT_STEP2_DATA);
-  const [documentData, setDocumentData] = useState<DocumentsStepData>(DEFAULT_DOCUMENTS_DATA);
+  const [documentData, setDocumentData] = useState<DocumentsStepData>(
+    DEFAULT_DOCUMENTS_DATA,
+  );
   const [notesData, setNotesData] = useState<NotesStepData>(DEFAULT_NOTES_DATA);
 
   // Account search state
-  const [searchStatus, setSearchStatus] = useState<SearchStepStatus>('searching');
-  const [searchResult, setSearchResult] = useState<AccountSearchResult | null>(null);
+  const [searchStatus, setSearchStatus] =
+    useState<SearchStepStatus>("searching");
+  const [searchResult, setSearchResult] = useState<AccountSearchResult | null>(
+    null,
+  );
   const [searchError, setSearchError] = useState<string | undefined>();
 
   // Account selection state - stores which account to use
-  const [accountSearchState, setAccountSearchState] = useState<AccountSearchState | null>(null);
+  const [accountSearchState, setAccountSearchState] =
+    useState<AccountSearchState | null>(null);
 
   // Form errors (will be used for validation)
-  const [accountErrors, setAccountErrors] = useState<Record<string, string>>({});
+  const [accountErrors, setAccountErrors] = useState<Record<string, string>>(
+    {},
+  );
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
   const [step2Errors, setStep2Errors] = useState<Record<string, string>>({});
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitResult, setSubmitResult] = useState<CreateDossierResult | null>(null);
-  const [uploadResult, setUploadResult] = useState<UploadDocumentsResult | null>(null);
+  const [submitResult, setSubmitResult] = useState<CreateDossierResult | null>(
+    null,
+  );
+  const [uploadResult, setUploadResult] =
+    useState<UploadDocumentsResult | null>(null);
   const [noteResult, setNoteResult] = useState<CreateNoteResult | null>(null);
 
   // Account creation state
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
-  const [createAccountError, setCreateAccountError] = useState<string | undefined>();
+  const [createAccountError, setCreateAccountError] = useState<
+    string | undefined
+  >();
 
   // ─── Validation Functions ─────────────────────────────────────────────────────
 
@@ -149,16 +180,16 @@ function Dossiers() {
     const errors: Record<string, string> = {};
 
     if (!accountData.firstName) {
-      errors.firstName = 'Le prénom est requis';
+      errors.firstName = "Le prénom est requis";
     }
     if (!accountData.lastName) {
-      errors.lastName = 'Le nom est requis';
+      errors.lastName = "Le nom est requis";
     }
     if (!accountData.phone) {
-      errors.phone = 'Le téléphone est requis';
+      errors.phone = "Le téléphone est requis";
     }
     if (!accountData.email) {
-      errors.email = 'L\'email est requis';
+      errors.email = "L'email est requis";
     }
 
     setAccountErrors(errors);
@@ -173,7 +204,7 @@ function Dossiers() {
       accountData.firstName?.trim() &&
       accountData.lastName?.trim() &&
       accountData.phone?.trim() &&
-      accountData.email?.trim()
+      accountData.email?.trim(),
     );
   };
 
@@ -188,10 +219,10 @@ function Dossiers() {
     const errors: Record<string, string> = {};
 
     if (!step1Data.opportunityCategory) {
-      errors.opportunityCategory = 'La catégorie est requise';
+      errors.opportunityCategory = "La catégorie est requise";
     }
     if (!step1Data.subsidiary) {
-      errors.subsidiary = 'La filiale est requise';
+      errors.subsidiary = "La filiale est requise";
     }
 
     setStep1Errors(errors);
@@ -209,10 +240,10 @@ function Dossiers() {
     const errors: Record<string, string> = {};
 
     if (!step2Data.productFamily) {
-      errors.productFamily = 'La famille de produit est requise';
+      errors.productFamily = "La famille de produit est requise";
     }
     if (!step2Data.transactionCategory) {
-      errors.transactionCategory = 'La catégorie de transaction est requise';
+      errors.transactionCategory = "La catégorie de transaction est requise";
     }
 
     setStep2Errors(errors);
@@ -225,10 +256,10 @@ function Dossiers() {
    * Perform account search when transitioning from account step to search-result
    */
   const performAccountSearch = async () => {
-    setSearchStatus('searching');
+    setSearchStatus("searching");
     setSearchError(undefined);
     setSearchResult(null);
-    setCurrentStep('search-result');
+    setCurrentStep("search-result");
 
     try {
       const result = await window.electronAPI.salesforce.searchAccount({
@@ -242,65 +273,69 @@ function Dossiers() {
 
       if (result.found) {
         // Check if multiple results returned
-        if (result.multipleResults && result.candidates && result.candidates.length > 1) {
-          setSearchStatus('multiple');
+        if (
+          result.multipleResults &&
+          result.candidates &&
+          result.candidates.length > 1
+        ) {
+          setSearchStatus("multiple");
         } else {
-          setSearchStatus('found');
+          setSearchStatus("found");
         }
       } else if (result.error) {
-        setSearchStatus('error');
-        setSearchError(result.message || 'Erreur lors de la recherche');
+        setSearchStatus("error");
+        setSearchError(result.message || "Erreur lors de la recherche");
       } else {
-        setSearchStatus('not-found');
+        setSearchStatus("not-found");
       }
     } catch (err) {
-      setSearchStatus('error');
-      setSearchError(err instanceof Error ? err.message : 'Erreur inconnue');
+      setSearchStatus("error");
+      setSearchError(err instanceof Error ? err.message : "Erreur inconnue");
     }
   };
 
   // ─── Navigation Handlers ──────────────────────────────────────────────────────
 
   const handleNext = () => {
-    if (currentStep === 'account') {
+    if (currentStep === "account") {
       // DEV mode bypass: skip search if form is completely empty (inspection mode)
       if (shouldBypassValidation(accountData)) {
         // Skip search step entirely - go straight to opportunity form
-        setCurrentStep('opportunity');
+        setCurrentStep("opportunity");
         return;
       }
-      
+
       if (validateAccount()) {
         // Normal flow: Trigger search and show intermediate step
         performAccountSearch();
       }
-    } else if (currentStep === 'opportunity') {
+    } else if (currentStep === "opportunity") {
       if (validateStep1()) {
-        setCurrentStep('case');
+        setCurrentStep("case");
       }
-    } else if (currentStep === 'case') {
+    } else if (currentStep === "case") {
       if (validateStep2()) {
-        setCurrentStep('documents');
+        setCurrentStep("documents");
       }
-    } else if (currentStep === 'documents') {
+    } else if (currentStep === "documents") {
       // No validation needed for documents - proceed to notes
-      setCurrentStep('notes');
+      setCurrentStep("notes");
     }
     // Note: 'search-result' step uses its own buttons, not the main Next button
   };
 
   const handlePrevious = () => {
-    if (currentStep === 'search-result') {
-      setCurrentStep('account');
-    } else if (currentStep === 'opportunity') {
+    if (currentStep === "search-result") {
+      setCurrentStep("account");
+    } else if (currentStep === "opportunity") {
       // Go back to account step (skip search-result)
-      setCurrentStep('account');
-    } else if (currentStep === 'case') {
-      setCurrentStep('opportunity');
-    } else if (currentStep === 'documents') {
-      setCurrentStep('case');
-    } else if (currentStep === 'notes') {
-      setCurrentStep('documents');
+      setCurrentStep("account");
+    } else if (currentStep === "case") {
+      setCurrentStep("opportunity");
+    } else if (currentStep === "documents") {
+      setCurrentStep("case");
+    } else if (currentStep === "notes") {
+      setCurrentStep("documents");
     }
   };
 
@@ -314,7 +349,7 @@ function Dossiers() {
     // Otherwise fallback to the single searchResult
     const finalAccountId = accountId || searchResult?.accountId;
     const finalAccountName = accountName || searchResult?.accountName;
-    
+
     if (finalAccountId && finalAccountName) {
       setAccountSearchState({
         found: true,
@@ -322,9 +357,9 @@ function Dossiers() {
         accountName: finalAccountName,
         matchedBy: searchResult?.matchedBy,
       });
-      console.log('Using existing account:', finalAccountId);
+      console.log("Using existing account:", finalAccountId);
     }
-    setCurrentStep('opportunity');
+    setCurrentStep("opportunity");
   };
 
   /**
@@ -334,13 +369,15 @@ function Dossiers() {
   const handleCreateNew = async () => {
     // Validate we have required data
     if (!accountData.lastName) {
-      setCreateAccountError('Le nom de famille est requis pour créer un compte');
+      setCreateAccountError(
+        "Le nom de famille est requis pour créer un compte",
+      );
       return;
     }
 
     setIsCreatingAccount(true);
     setCreateAccountError(undefined);
-    console.log('Creating new account with:', accountData);
+    console.log("Creating new account with:", accountData);
 
     try {
       const result = await window.electronAPI.salesforce.createAccount({
@@ -352,24 +389,32 @@ function Dossiers() {
 
       if (result.success && result.accountId) {
         // Account created successfully
-        console.log('Account created:', result.accountId, result.accountName);
-        
+        console.log("Account created:", result.accountId, result.accountName);
+
         setAccountSearchState({
           found: true,
           accountId: result.accountId,
-          accountName: result.accountName || `${accountData.firstName} ${accountData.lastName}`,
+          accountName:
+            result.accountName ||
+            `${accountData.firstName} ${accountData.lastName}`,
           isNewAccount: true,
         });
-        
-        setCurrentStep('opportunity');
+
+        setCurrentStep("opportunity");
       } else {
         // Creation failed
-        console.error('Account creation failed:', result.error);
-        setCreateAccountError(result.error || result.message || 'Erreur lors de la création du compte');
+        console.error("Account creation failed:", result.error);
+        setCreateAccountError(
+          result.error ||
+            result.message ||
+            "Erreur lors de la création du compte",
+        );
       }
     } catch (err) {
-      console.error('Account creation error:', err);
-      setCreateAccountError(err instanceof Error ? err.message : 'Erreur inconnue');
+      console.error("Account creation error:", err);
+      setCreateAccountError(
+        err instanceof Error ? err.message : "Erreur inconnue",
+      );
     } finally {
       setIsCreatingAccount(false);
     }
@@ -382,21 +427,21 @@ function Dossiers() {
     const step2Valid = validateStep2();
 
     if (!accountValid) {
-      setCurrentStep('account');
+      setCurrentStep("account");
       return;
     }
     if (!step1Valid) {
-      setCurrentStep('opportunity');
+      setCurrentStep("opportunity");
       return;
     }
     if (!step2Valid) {
-      setCurrentStep('case');
+      setCurrentStep("case");
       return;
     }
 
     // Check that we have an account to use (existing account workflow only for now)
     if (!accountSearchState?.found || !accountSearchState?.accountId) {
-      console.error('No account selected - cannot create dossier');
+      console.error("No account selected - cannot create dossier");
       return;
     }
 
@@ -406,7 +451,14 @@ function Dossiers() {
     setUploadResult(null);
     setNoteResult(null);
 
-    console.log('Submitting form data:', { accountData, accountSearchState, step1Data, step2Data, documentData, notesData });
+    console.log("Submitting form data:", {
+      accountData,
+      accountSearchState,
+      step1Data,
+      step2Data,
+      documentData,
+      notesData,
+    });
 
     try {
       // ── Step 1: Create Opportunity + Case ─────────────────────────────────────
@@ -431,15 +483,15 @@ function Dossiers() {
         },
       });
 
-      console.log('Dossier creation result:', result);
+      console.log("Dossier creation result:", result);
       setSubmitResult(result);
 
       // ── Step 2: Upload documents (if any and Case was created) ────────────────
       if (result.success && result.caseId && documentData.files.length > 0) {
-        console.log('Uploading documents to Case:', result.caseId);
+        console.log("Uploading documents to Case:", result.caseId);
 
         // Wait 2 seconds for OpenText workspace to be ready
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Convert File objects to serializable format
         const filesForUpload = await Promise.all(
@@ -451,7 +503,7 @@ function Dossiers() {
               size: f.size,
               buffer: Array.from(new Uint8Array(arrayBuffer)),
             };
-          })
+          }),
         );
 
         const uploadRes = await window.electronAPI.salesforce.uploadDocuments({
@@ -459,28 +511,33 @@ function Dossiers() {
           files: filesForUpload,
         });
 
-        console.log('Document upload result:', uploadRes);
+        console.log("Document upload result:", uploadRes);
         setUploadResult(uploadRes);
       }
 
       // ── Step 3: Create note (if notes content exists and Case was created) ────
-      if (result.success && result.caseId && notesData.notes && notesData.notes.trim().length > 0) {
-        console.log('Creating note for Case:', result.caseId);
+      if (
+        result.success &&
+        result.caseId &&
+        notesData.notes &&
+        notesData.notes.trim().length > 0
+      ) {
+        console.log("Creating note for Case:", result.caseId);
 
         const noteRes = await window.electronAPI.salesforce.createNote({
           caseId: result.caseId,
-          title: 'Note du dossier',
+          title: "Note du dossier",
           content: notesData.notes,
         });
 
-        console.log('Note creation result:', noteRes);
+        console.log("Note creation result:", noteRes);
         setNoteResult(noteRes);
       }
     } catch (err) {
-      console.error('Dossier creation error:', err);
+      console.error("Dossier creation error:", err);
       setSubmitResult({
         success: false,
-        error: err instanceof Error ? err.message : 'Erreur inconnue',
+        error: err instanceof Error ? err.message : "Erreur inconnue",
       });
     } finally {
       setIsSubmitting(false);
@@ -506,20 +563,20 @@ function Dossiers() {
     // auto-select productInterest = "Life Insurance" (Step 2)
     // and pre-populate productFamily = "Insurance" in Step 3 (case form)
     if (
-      data.opportunityCategory === 'Insurance' &&
-      step1Data.opportunityCategory !== 'Insurance'
+      data.opportunityCategory === "Insurance" &&
+      step1Data.opportunityCategory !== "Insurance"
     ) {
       // Auto-select productInterest in this step
-      data = { ...data, productInterest: 'Life Insurance' };
+      data = { ...data, productInterest: "Life Insurance" };
 
       // Pre-populate Step 3 productFamily (reset cascade children)
       setStep2Data((prev) => ({
         ...prev,
-        productFamily: 'Insurance',
-        transactionCategory: '',
-        transactionSubCategory: '',
-        signatureType: '',
-        productType: '',
+        productFamily: "Insurance",
+        transactionCategory: "",
+        transactionSubCategory: "",
+        signatureType: "",
+        productType: "",
       }));
     }
 
@@ -549,12 +606,12 @@ function Dossiers() {
 
     try {
       const result = await window.electronAPI.auth.login(false);
-      
+
       if (result.success) {
         // Refresh auth status after successful login
         await refreshAuthStatus();
       } else {
-        setLoginError(result.message || 'Échec de la connexion');
+        setLoginError(result.message || "Échec de la connexion");
       }
     } catch (e) {
       const error = e as Error;
@@ -567,7 +624,7 @@ function Dossiers() {
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   const displayStep = getDisplayStep(currentStep);
-  const isSearchResultStep = currentStep === 'search-result';
+  const isSearchResultStep = currentStep === "search-result";
 
   // ─── Auth Check: Show loading skeleton while checking ─────────────────────────
   if (isChecking) {
@@ -577,9 +634,9 @@ function Dossiers() {
         <div className="flex-1 overflow-auto">
           <div className="p-6">
             <div className="max-w-4xl space-y-4">
-              <Skeleton className="h-8 w-48" />
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-32 w-full" />
+              <Skeleton className="w-48 h-8" />
+              <Skeleton className="w-full h-32" />
+              <Skeleton className="w-full h-32" />
             </div>
           </div>
         </div>
@@ -622,9 +679,9 @@ function Dossiers() {
         <div className="p-6">
           <div className="max-w-4xl">
             {/* Step forms — each step component owns its Card container */}
-            
+
             {/* Step 1: Account Info Form */}
-            {currentStep === 'account' && (
+            {currentStep === "account" && (
               <AccountInfoStep
                 data={accountData}
                 onChange={handleAccountChange}
@@ -633,21 +690,21 @@ function Dossiers() {
             )}
 
             {/* Step 1.5: Search Result (intermediate) */}
-            {currentStep === 'search-result' && (
+            {currentStep === "search-result" && (
               <AccountSearchStep
                 status={searchStatus}
                 searchResult={searchResult}
                 errorMessage={searchError}
                 onUseAccount={handleUseAccount}
                 onCreateNew={handleCreateNew}
-                onPrevious={() => setCurrentStep('account')}
+                onPrevious={() => setCurrentStep("account")}
                 isCreating={isCreatingAccount}
                 createError={createAccountError}
               />
             )}
 
             {/* Step 2: Opportunity Details */}
-            {currentStep === 'opportunity' && (
+            {currentStep === "opportunity" && (
               <OpportunityStep
                 data={step1Data}
                 onChange={handleStep1Change}
@@ -656,7 +713,7 @@ function Dossiers() {
             )}
 
             {/* Step 3: Case/Product Family */}
-            {currentStep === 'case' && (
+            {currentStep === "case" && (
               <CaseStep
                 data={step2Data}
                 onChange={handleStep2Change}
@@ -665,63 +722,73 @@ function Dossiers() {
             )}
 
             {/* Step 4: Document Upload */}
-            {currentStep === 'documents' && (
-              <DocumentsStep
-                data={documentData}
-                onChange={setDocumentData}
-              />
+            {currentStep === "documents" && (
+              <DocumentsStep data={documentData} onChange={setDocumentData} />
             )}
 
             {/* Step 5: Notes */}
-            {currentStep === 'notes' && (
-              <NotesStep
-                data={notesData}
-                onChange={setNotesData}
-              />
+            {currentStep === "notes" && (
+              <NotesStep data={notesData} onChange={setNotesData} />
             )}
 
             {/* Submission Result */}
             {submitResult && (
-              <Card className={`mt-6 pl-1 border ${
-                submitResult.success && (!uploadResult || uploadResult.success)
-                  ? 'border-green-200 dark:border-green-900'
-                  : submitResult.success && uploadResult && !uploadResult.success
-                    ? 'border-amber-200 dark:border-amber-900'
-                    : 'border-red-200 dark:border-red-900'
-              }`}>
+              <Card
+                className={`mt-6 pl-1 border ${
+                  submitResult.success &&
+                  (!uploadResult || uploadResult.success)
+                    ? "border-green-200 dark:border-green-900"
+                    : submitResult.success &&
+                        uploadResult &&
+                        !uploadResult.success
+                      ? "border-amber-200 dark:border-amber-900"
+                      : "border-red-200 dark:border-red-900"
+                }`}
+              >
                 <CardHeader>
-                  <CardTitle className={
-                    submitResult.success && (!uploadResult || uploadResult.success)
-                      ? 'text-green-700 dark:text-green-400'
-                      : submitResult.success && uploadResult && !uploadResult.success
-                        ? 'text-amber-700 dark:text-amber-400'
-                        : 'text-red-700 dark:text-red-400'
-                  }>
+                  <CardTitle
+                    className={
+                      submitResult.success &&
+                      (!uploadResult || uploadResult.success)
+                        ? "text-green-700 dark:text-green-400"
+                        : submitResult.success &&
+                            uploadResult &&
+                            !uploadResult.success
+                          ? "text-amber-700 dark:text-amber-400"
+                          : "text-red-700 dark:text-red-400"
+                    }
+                  >
                     {submitResult.success
                       ? uploadResult && !uploadResult.success
-                        ? '⚠️ Dossier créé (upload partiel)'
-                        : '✅ Dossier créé avec succès'
-                      : '❌ Erreur lors de la création'
-                    }
+                        ? "⚠️ Dossier créé (upload partiel)"
+                        : "✅ Dossier créé avec succès"
+                      : "❌ Erreur lors de la création"}
                   </CardTitle>
                   <CardDescription>
                     {submitResult.success
-                      ? 'L\'Opportunity et le Case ont été créés dans Salesforce'
-                      : submitResult.error
-                    }
+                      ? "L'Opportunity et le Case ont été créés dans Salesforce"
+                      : submitResult.error}
                   </CardDescription>
                 </CardHeader>
                 {submitResult.success && (
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-muted-foreground">Opportunity ID:</span>
-                        <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.opportunityId}</code>
+                        <span className="text-sm font-medium text-muted-foreground">
+                          Opportunity ID:
+                        </span>
+                        <code className="px-2 py-0.5 text-xs rounded bg-muted">
+                          {submitResult.opportunityId}
+                        </code>
                       </div>
                       {submitResult.caseId && (
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-muted-foreground">Case ID:</span>
-                          <code className="px-2 py-0.5 text-xs rounded bg-muted">{submitResult.caseId}</code>
+                          <span className="text-sm font-medium text-muted-foreground">
+                            Case ID:
+                          </span>
+                          <code className="px-2 py-0.5 text-xs rounded bg-muted">
+                            {submitResult.caseId}
+                          </code>
                         </div>
                       )}
                       {submitResult.warning && (
@@ -735,13 +802,20 @@ function Dossiers() {
                     {uploadResult && (
                       <div className="pt-4 border-t border-border">
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-medium">📄 Documents:</span>
-                          <span className={`text-sm ${
-                            uploadResult.success
-                              ? 'text-green-600 dark:text-green-400'
-                              : 'text-amber-600 dark:text-amber-400'
-                          }`}>
-                            {uploadResult.uploadedCount}/{uploadResult.uploadedCount + uploadResult.failedCount} uploadés
+                          <span className="text-sm font-medium">
+                            📄 Documents:
+                          </span>
+                          <span
+                            className={`text-sm ${
+                              uploadResult.success
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-amber-600 dark:text-amber-400"
+                            }`}
+                          >
+                            {uploadResult.uploadedCount}/
+                            {uploadResult.uploadedCount +
+                              uploadResult.failedCount}{" "}
+                            uploadés
                           </span>
                         </div>
 
@@ -751,10 +825,22 @@ function Dossiers() {
                               key={idx}
                               className="flex items-center gap-2 text-sm"
                             >
-                              <span className={fileResult.success ? 'text-green-600' : 'text-red-600'}>
-                                {fileResult.success ? '✓' : '✗'}
+                              <span
+                                className={
+                                  fileResult.success
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }
+                              >
+                                {fileResult.success ? "✓" : "✗"}
                               </span>
-                              <span className={fileResult.success ? 'text-foreground' : 'text-red-600 dark:text-red-400'}>
+                              <span
+                                className={
+                                  fileResult.success
+                                    ? "text-foreground"
+                                    : "text-red-600 dark:text-red-400"
+                                }
+                              >
                                 {fileResult.fileName}
                               </span>
                               {fileResult.error && (
@@ -788,12 +874,14 @@ function Dossiers() {
                       <div className="pt-4 border-t border-border">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">📝 Note:</span>
-                          <span className={`text-sm ${
-                            noteResult.success
-                              ? 'text-green-600 dark:text-green-400'
-                              : 'text-amber-600 dark:text-amber-400'
-                          }`}>
-                            {noteResult.success ? 'Ajoutée' : 'Échec'}
+                          <span
+                            className={`text-sm ${
+                              noteResult.success
+                                ? "text-green-600 dark:text-green-400"
+                                : "text-amber-600 dark:text-amber-400"
+                            }`}
+                          >
+                            {noteResult.success ? "Ajoutée" : "Échec"}
                           </span>
                         </div>
                         {noteResult.warning && (
@@ -810,13 +898,15 @@ function Dossiers() {
                     )}
 
                     {/* No notes case */}
-                    {!noteResult && (!notesData.notes || notesData.notes.trim().length === 0) && (
-                      <div className="pt-4 border-t border-border">
-                        <p className="text-sm text-muted-foreground">
-                          📝 Aucune note ajoutée
-                        </p>
-                      </div>
-                    )}
+                    {!noteResult &&
+                      (!notesData.notes ||
+                        notesData.notes.trim().length === 0) && (
+                        <div className="pt-4 border-t border-border">
+                          <p className="text-sm text-muted-foreground">
+                            📝 Aucune note ajoutée
+                          </p>
+                        </div>
+                      )}
                   </CardContent>
                 )}
               </Card>
@@ -827,13 +917,13 @@ function Dossiers() {
               <div className="flex justify-between mt-6">
                 <Button
                   variant="secondary"
-                  disabled={currentStep === 'account' || isSubmitting}
+                  disabled={currentStep === "account" || isSubmitting}
                   onClick={handlePrevious}
                 >
                   ← Précédent
                 </Button>
 
-                {currentStep === 'notes' ? (
+                {currentStep === "notes" ? (
                   <Button onClick={handleSubmit} disabled={isSubmitting}>
                     {isSubmitting ? (
                       <>
@@ -841,13 +931,16 @@ function Dossiers() {
                         Création en cours...
                       </>
                     ) : (
-                      'Créer le dossier'
+                      "Créer le dossier"
                     )}
                   </Button>
                 ) : (
                   <Button
                     onClick={handleNext}
-                    disabled={currentStep === 'account' && !shouldEnableNextButton(isAccountStepComplete())}
+                    disabled={
+                      currentStep === "account" &&
+                      !shouldEnableNextButton(isAccountStepComplete())
+                    }
                   >
                     Suivant →
                   </Button>
@@ -859,10 +952,10 @@ function Dossiers() {
             {submitResult?.success && (
               <div className="flex justify-center mt-6">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => {
                     // Reset form for new dossier
-                    setCurrentStep('account');
+                    setCurrentStep("account");
                     setAccountData(DEFAULT_ACCOUNT_DATA);
                     setStep1Data(DEFAULT_STEP1_DATA);
                     setStep2Data(DEFAULT_STEP2_DATA);
@@ -886,7 +979,22 @@ function Dossiers() {
                   Debug: Form Data
                 </summary>
                 <pre className="p-4 mt-2 overflow-auto text-xs rounded bg-muted text-muted-foreground">
-                  {JSON.stringify({ currentStep, accountData, accountSearchState, step1Data, step2Data, documentData, notesData, submitResult, uploadResult, noteResult }, null, 2)}
+                  {JSON.stringify(
+                    {
+                      currentStep,
+                      accountData,
+                      accountSearchState,
+                      step1Data,
+                      step2Data,
+                      documentData,
+                      notesData,
+                      submitResult,
+                      uploadResult,
+                      noteResult,
+                    },
+                    null,
+                    2,
+                  )}
                 </pre>
               </details>
             )}
