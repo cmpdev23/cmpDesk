@@ -74,6 +74,21 @@ function register() {
     }
   });
 
+  // Test connection - open Salesforce home for manual verification
+  ipcMain.handle('auth:testConnection', async () => {
+    log.debug('IPC', 'auth:testConnection called');
+    try {
+      const result = await authService.testConnection();
+      return result;
+    } catch (error) {
+      log.error('IPC', 'auth:testConnection error', error);
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  });
+
   log.debug('IPC', 'Auth handlers registered');
 }
 

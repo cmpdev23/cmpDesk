@@ -24,7 +24,7 @@ import type { AuthStatus as AuthStatusType } from '../../types/electron';
 // TYPES
 // ============================================================================
 
-type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'expired' | 'logging-in' | 'logging-out';
+type ConnectionState = 'checking' | 'connected' | 'disconnected' | 'expired' | 'logging-in' | 'logging-out' | 'testing';
 
 interface AuthState {
   connectionState: ConnectionState;
@@ -147,6 +147,33 @@ export function AuthStatus() {
     }
   };
 
+  // Handle test connection button click
+  const handleTestConnection = async () => {
+    setState(prev => ({ ...prev, connectionState: 'testing', error: null }));
+
+    try {
+      const result = await window.electronAPI.auth.testConnection();
+      
+      if (result.success) {
+        // Re-check status after test (session may have been refreshed)
+        await checkStatus();
+      } else {
+        setState(prev => ({
+          ...prev,
+          connectionState: 'connected', // Keep as connected since test failed but session might still be valid
+          error: result.message || 'Erreur lors du test',
+        }));
+      }
+    } catch (e) {
+      const error = e as Error;
+      setState(prev => ({
+        ...prev,
+        connectionState: 'connected',
+        error: error.message,
+      }));
+    }
+  };
+
   // Render based on connection state
   return (
     <div className="p-4 border-t border-sidebar-border">
@@ -189,6 +216,16 @@ export function AuthStatus() {
               </div>
             )}
           </div>
+          
+          {/* Test connection button */}
+          <Button
+            onClick={handleTestConnection}
+            variant="default"
+            size="sm"
+            className="w-full"
+          >
+            Tester la connexion
+          </Button>
           
           {/* Logout button */}
           <Button
@@ -235,6 +272,7 @@ function StatusIndicator({ state }: StatusIndicatorProps) {
       case 'logging-in':
       case 'logging-out':
       case 'checking':
+      case 'testing':
         return 'bg-chart-3 animate-pulse';
       case 'disconnected':
       default:
@@ -263,6 +301,8 @@ function getStatusLabel(state: ConnectionState): string {
       return 'Déconnexion...';
     case 'checking':
       return 'Vérification...';
+    case 'testing':
+      return 'Test en cours...';
     case 'disconnected':
     default:
       return 'Non connecté';

@@ -4245,6 +4245,81 @@ ipcMain.handle('auth:logout', async () => {
   }
 });
 
+// Test connection - open Salesforce home for manual verification
+ipcMain.handle('auth:testConnection', async () => {
+  try {
+    log.info('IPC', 'auth:testConnection called');
+    const auth = await getAuthModule();
+    
+    // Launch browser with persistent profile using chromium directly
+    const context = await auth.chromium.launchPersistentContext(auth.BROWSER_PROFILE, {
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+    });
+    trackPlaywrightContext(context);
+    
+    // Restore saved cookies to ensure session is loaded
+    const restoredCount = await auth.restoreCookies(context);
+    log.info('AUTH', `Restored ${restoredCount} cookies for test connection`);
+    
+    const page = await context.newPage();
+    
+    // Navigate to Salesforce home
+    log.info('AUTH', 'Navigating to Salesforce home for test');
+    await page.goto(SF_HOME_URL, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+    
+    // Wait a bit for any redirects
+    await page.waitForTimeout(2000);
+    
+    const currentUrl = page.url();
+    log.info('AUTH', `Test connection - current URL: ${currentUrl}`);
+    
+    // Check if we landed on Lightning (connected) or login page (need auth)
+    if (currentUrl.includes('lightning.force.com')) {
+      log.info('AUTH', 'Session is valid - user is connected');
+      
+      // Save cookies to update session state
+      await auth.saveCookies(context);
+      
+      return {
+        success: true,
+        message: 'Connecté - Session valide',
+        needsAction: false,
+      };
+    }
+    
+    // User needs to complete authentication manually
+    log.info('AUTH', 'Session expired or invalid - user needs to authenticate');
+    
+    return {
+      success: true,
+      message: 'Veuillez compléter l\'authentification dans le navigateur',
+      needsAction: true,
+    };
+    
+  } catch (e) {
+    log.error('IPC', 'auth:testConnection error', e);
+    
+    // Check if browser profile is locked
+    if (e.message?.includes('lock') || e.message?.includes('LOCK')) {
+      return {
+        success: false,
+        message: 'Un navigateur est déjà ouvert. Fermez-le et réessayez.',
+        error: 'BROWSER_PROFILE_LOCKED',
+      };
+    }
+    
+    return {
+      success: false,
+      message: e.message || 'Erreur lors du test de connexion',
+      error: 'UNKNOWN',
+    };
+  }
+});
+
 // Get user data path (for debugging)
 ipcMain.handle('app:getUserDataPath', () => {
   return app.getPath('userData');

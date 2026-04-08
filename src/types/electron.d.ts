@@ -36,11 +36,20 @@ export interface LogoutResult {
   error?: string;
 }
 
+export interface TestConnectionResult {
+  success: boolean;
+  message: string;
+  needsAction?: boolean;
+  error?: 'BROWSER_PROFILE_LOCKED' | 'UNKNOWN';
+}
+
 export interface AuthAPI {
   getStatus: () => Promise<AuthStatus>;
   login: (forceAuth?: boolean) => Promise<LoginResult>;
   ensureSession: () => Promise<EnsureSessionResult>;
   logout: () => Promise<LogoutResult>;
+  /** Test connection - open Salesforce home page for manual verification */
+  testConnection: () => Promise<TestConnectionResult>;
 }
 
 // ============================================================================

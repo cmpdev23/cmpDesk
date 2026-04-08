@@ -68,6 +68,23 @@ const authAPI = {
    * }>}
    */
   logout: () => ipcRenderer.invoke('auth:logout'),
+  
+  /**
+   * Test connection - open Salesforce home page for manual verification.
+   *
+   * Use this to:
+   * - Verify the session is working correctly
+   * - Complete any additional authentication steps (MFA, consent, etc.)
+   * - Visually confirm the user is connected
+   *
+   * @returns {Promise<{
+   *   success: boolean,
+   *   message: string,
+   *   needsAction?: boolean,
+   *   error?: string
+   * }>}
+   */
+  testConnection: () => ipcRenderer.invoke('auth:testConnection'),
 };
 
 // ============================================================================
@@ -333,7 +350,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 console.log('🚀 cmpDesk preload script loaded');
-console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession}');
+console.log('   Available APIs: electronAPI.auth.{getStatus, login, ensureSession, logout, testConnection}');
 console.log('   Available APIs: electronAPI.logs.{getBuffer, clear, add, onEntry}');
 console.log('   Available APIs: electronAPI.salesforce.{searchAccount, createAccount, createDossier, uploadDocuments, createNote}');
 console.log('   Available APIs: electronAPI.theme.{getMode, setMode, onChange}');

@@ -703,3 +703,81 @@ interface AppAPI {
   onUpdateDownloaded: (callback: (info: UpdateInfo) => void) => () => void;
 }
 ```
+
+---
+
+## 🧪 Test Connection Feature (2026-04-08)
+
+### Purpose
+
+Allows users to manually verify their Salesforce session by opening the SF home page in a browser.
+
+**Use cases**:
+1. Verify session is working correctly after login
+2. Complete additional authentication steps (MFA, consent, security checks)
+3. Visually confirm connection before running automations
+4. Resolve missing cookies or session issues
+
+### Architecture
+
+```
+src/components/sidebar/AuthStatus.tsx   # "Tester la connexion" button
+        │
+        ▼ IPC
+electron/preload.js                     # Exposes auth.testConnection()
+        │
+        ▼ IPC Handler
+electron/ipc/auth.js                    # auth:testConnection handler
+        │
+        ▼
+electron/services/auth/index.js         # testConnection() function
+        │
+        ▼
+Playwright Browser                      # Opens SF home page
+```
+
+### API Usage (Renderer)
+
+```typescript
+// Test connection - opens browser for manual verification
+const result = await window.electronAPI.auth.testConnection();
+// {
+//   success: boolean,
+//   message: string,
+//   needsAction?: boolean,  // true if user needs to complete auth manually
+//   error?: 'BROWSER_PROFILE_LOCKED' | 'UNKNOWN'
+// }
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `electron/services/auth/index.js` | `testConnection()` function |
+| `electron/ipc/auth.js` | IPC handler `auth:testConnection` |
+| `electron/preload.js` | Exposes `auth.testConnection` to renderer |
+| `src/types/electron.d.ts` | `TestConnectionResult` type |
+| `src/components/sidebar/AuthStatus.tsx` | UI button + handler |
+
+### Behavior
+
+1. **User clicks "Tester la connexion"** → UI shows "Test en cours..."
+2. **Browser launches** with persistent profile (reuses cookies)
+3. **Navigates to SF home page** (`AUTH_TARGET.waitForUrl`)
+4. **If session valid** → User sees Lightning, session is refreshed
+5. **If session expired** → User sees login page, can complete auth manually
+6. **Browser stays open** for user interaction (manual MFA, etc.)
+7. **On success** → Session state saved, UI refreshes to show "Connecté"
+
+### Error Handling
+
+- **BROWSER_PROFILE_LOCKED**: Another browser instance is using the profile. User must close it first.
+- **Navigation timeout**: 30s timeout for initial page load
+- **Auth check**: Compares current URL against expected Lightning URL pattern
+
+### Key Insights
+
+- **Browser stays open**: Unlike automated operations, the browser remains open so user can interact
+- **Session refresh**: On success, cookies and session state are saved automatically
+- **Non-blocking**: UI remains responsive during test (async operation)
+- **Uses existing profile**: Shares cookies/session with login flow

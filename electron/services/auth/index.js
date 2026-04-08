@@ -223,6 +223,91 @@ async function closeSession() {
 }
 
 // ============================================================================
+// TEST CONNECTION
+// ============================================================================
+
+/**
+ * Open Salesforce home page for manual verification.
+ *
+ * This allows the user to:
+ * 1. Verify the session is working correctly
+ * 2. Complete any additional authentication steps (MFA, consent, etc.)
+ * 3. Visually confirm they are connected
+ *
+ * The browser stays open for manual interaction.
+ *
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+async function testConnection() {
+  log.info('AUTH', 'Test connection initiated');
+  
+  try {
+    // Launch browser with persistent profile
+    authContext = await browser.launchPersistentContext({
+      headless: false,
+    });
+    
+    const page = await authContext.newPage();
+    authPage = page;
+    
+    // Navigate to Salesforce home
+    log.info('AUTH', 'Navigating to Salesforce home');
+    await page.goto(AUTH_TARGET.waitForUrl, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+    
+    // Wait a bit for any redirects
+    await page.waitForTimeout(2000);
+    
+    const currentUrl = page.url();
+    log.info('AUTH', `Current URL: ${currentUrl}`);
+    
+    // Check if we landed on Lightning (connected) or login page (need auth)
+    if (currentUrl.startsWith(AUTH_TARGET.waitForUrl)) {
+      log.info('AUTH', 'Session is valid - user is connected');
+      
+      // Update session state
+      await browser.saveCookies(authContext);
+      await browser.saveSessionState(authContext);
+      
+      return {
+        success: true,
+        message: 'Connecté - Session valide',
+        needsAction: false,
+      };
+    }
+    
+    // User needs to complete authentication manually
+    log.info('AUTH', 'Session expired or invalid - user needs to authenticate');
+    
+    return {
+      success: true,
+      message: 'Veuillez compléter l\'authentification dans le navigateur',
+      needsAction: true,
+    };
+    
+  } catch (error) {
+    log.error('AUTH', 'Test connection failed', error);
+    
+    // Check if browser profile is locked
+    if (error.message?.includes('lock') || error.message?.includes('LOCK')) {
+      return {
+        success: false,
+        message: 'Un navigateur est déjà ouvert. Fermez-le et réessayez.',
+        error: 'BROWSER_PROFILE_LOCKED',
+      };
+    }
+    
+    return {
+      success: false,
+      message: error.message || 'Erreur lors du test de connexion',
+      error: 'UNKNOWN',
+    };
+  }
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -233,6 +318,7 @@ module.exports = {
   getPage,
   getContext,
   closeSession,
+  testConnection,
   // Re-export browser utilities for advanced use
   browser,
 };
