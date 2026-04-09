@@ -38,11 +38,21 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
-      # 5. Build frontend (Vite)
+      # 5. Create .env file from repository variables
+      - name: Create .env from repository variables
+        run: |
+          echo "# Auto-generated from GitHub repository variables" > .env
+          echo "ENV=${{ vars.ENV || 'PROD' }}" >> .env
+          echo "DEBUG_LOGS=${{ vars.DEBUG_LOGS || 'false' }}" >> .env
+          echo "SHOW_DEVTOOLS=${{ vars.SHOW_DEVTOOLS || 'false' }}" >> .env
+          echo "LOG_LEVEL=${{ vars.LOG_LEVEL || 'warn' }}" >> .env
+        shell: bash
+
+      # 6. Build frontend (Vite)
       - name: Build frontend
         run: npm run build
 
-      # 6. Build and publish Electron application
+      # 7. Build and publish Electron application
       - name: Build & Publish Electron (Windows)
         run: npx electron-builder --win --x64 --publish always
         env:
@@ -51,7 +61,7 @@ jobs:
           # Disable code signing for now (Phase 6)
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # 7. Upload build artifacts (backup)
+      # 8. Upload build artifacts (backup)
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:

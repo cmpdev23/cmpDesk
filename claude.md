@@ -201,6 +201,66 @@ src/
 
 ---
 
+## 🌐 Environment Variables Strategy (2026-04-09)
+
+### Overview
+
+| Context | Source | Priority |
+|---------|--------|----------|
+| **Local development** | `.env` file | Highest |
+| **Local fallback** | `.env.example` | If `.env` missing |
+| **GitHub CI/CD** | Repository Variables | Injected at build time |
+
+### Local Development
+
+Variables loaded via `dotenv` in [`electron/main.js`](electron/main.js:30-39):
+
+```javascript
+const envPath = path.join(__dirname, '..', '.env');
+const envExamplePath = path.join(__dirname, '..', '.env.example');
+
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+} else if (fs.existsSync(envExamplePath)) {
+  dotenv.config({ path: envExamplePath });
+}
+```
+
+**Setup**: Copy `.env.example` to `.env` and customize values.
+
+### GitHub CI/CD
+
+Variables defined in **GitHub Repository → Settings → Secrets and Variables → Actions → Variables**.
+
+Workflows (`.github/workflows/build.yml` and `release.yml`) inject these at build time:
+
+```yaml
+- name: Create .env from repository variables
+  run: |
+    echo "ENV=${{ vars.ENV || 'PROD' }}" >> .env
+    echo "DEBUG_LOGS=${{ vars.DEBUG_LOGS || 'false' }}" >> .env
+    echo "SHOW_DEVTOOLS=${{ vars.SHOW_DEVTOOLS || 'false' }}" >> .env
+    echo "LOG_LEVEL=${{ vars.LOG_LEVEL || 'warn' }}" >> .env
+```
+
+### Available Variables
+
+| Variable | Default (CI) | Description |
+|----------|--------------|-------------|
+| `ENV` | `PROD` | `DEV` or `PROD` - controls debug features |
+| `DEBUG_LOGS` | `false` | Enable debug-level logging |
+| `SHOW_DEVTOOLS` | `false` | Auto-open DevTools on start |
+| `LOG_LEVEL` | `warn` | `debug`, `info`, `warn`, `error` |
+
+### Key Points
+
+1. **`.env` is gitignored** — never committed, local secrets stay local
+2. **GitHub Variables (not Secrets)** — because these are non-sensitive config, not credentials
+3. **Fallback defaults** — if vars not set in GitHub, sensible PROD defaults apply
+4. **Packaged app** — `.env` is created during build, bundled with the executable
+
+---
+
 ## 🧪 DEV Mode Form Bypass
 
 **Purpose**: Navigate freely through form steps without triggering automations (for UI inspection/debugging).
