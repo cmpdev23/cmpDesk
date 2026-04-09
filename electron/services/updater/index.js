@@ -16,7 +16,8 @@
  */
 
 import { app } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import pkg from 'electron-updater';
+const { autoUpdater } = pkg;
 
 // ============================================================================
 // LOGGER (inline since we use ESM)
