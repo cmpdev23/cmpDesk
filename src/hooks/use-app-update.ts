@@ -107,12 +107,25 @@ export function useAppUpdate(): UseAppUpdateReturn {
     try {
       const result = await window.electronAPI.app.checkForUpdates();
       
+      // Log result for debugging
+      console.log('[UPDATER] checkForUpdates result:', result);
+      
+      // Check if service returned an error
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      
       if (result.updateAvailable && result.info) {
-        // Note: updateAvailable state will be set by the onUpdateDownloaded listener
-        // when the download completes. This just initiates the check.
+        // Update is available - download will happen automatically
+        // The onUpdateDownloaded listener will set updateAvailable when ready
+        console.log('[UPDATER] Update available:', result.info.version);
+      } else {
+        console.log('[UPDATER] No update available');
       }
     } catch (e) {
       const err = e as Error;
+      console.error('[UPDATER] Exception:', err);
       setError(err.message || 'Failed to check for updates');
     } finally {
       setIsChecking(false);

@@ -175,15 +175,26 @@ export async function checkForUpdates() {
   }
   
   try {
-    log.info('UPDATER', 'Checking for updates...');
+    const currentVersion = app.getVersion();
+    log.info('UPDATER', `Checking for updates... (current: v${currentVersion})`);
+    
     const result = await autoUpdater.checkForUpdates();
     
+    log.debug('UPDATER', 'Raw checkForUpdates result:', {
+      hasUpdateInfo: !!result?.updateInfo,
+      updateInfoVersion: result?.updateInfo?.version,
+      cancellationToken: !!result?.cancellationToken,
+    });
+    
     if (result?.updateInfo) {
-      const currentVersion = app.getVersion();
       const latestVersion = result.updateInfo.version;
+      
+      log.info('UPDATER', `Version comparison: current=${currentVersion}, latest=${latestVersion}`);
       
       // Compare versions to determine if update is available
       const updateAvailable = latestVersion !== currentVersion;
+      
+      log.info('UPDATER', `Update available: ${updateAvailable}`);
       
       return {
         updateAvailable,
@@ -195,10 +206,15 @@ export async function checkForUpdates() {
       };
     }
     
+    log.warn('UPDATER', 'No updateInfo in result');
     return { updateAvailable: false };
   } catch (error) {
-    log.error('UPDATER', 'Check for updates failed', error);
-    // Don't throw - just return no update
+    log.error('UPDATER', 'Check for updates failed', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
+    // Don't throw - just return no update with error
     return { updateAvailable: false, error: error.message };
   }
 }
