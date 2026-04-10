@@ -103,6 +103,7 @@ export function OpportunityStep({
           <FormField
             label="Produit d'intérêt"
             htmlFor="productInterest"
+            required
             error={errors.productInterest}
           >
             <SelectField
@@ -112,6 +113,7 @@ export function OpportunityStep({
               onValueChange={handleSelectChange("productInterest")}
               options={PRODUCT_INTEREST_OPTIONS}
               placeholder="Sélectionner un produit..."
+              required
             />
           </FormField>
 
@@ -137,6 +139,7 @@ export function OpportunityStep({
           <FormField
             label="Numéro de contrat"
             htmlFor="contractNumber"
+            required
             error={errors.contractNumber}
           >
             <InputField
@@ -145,6 +148,7 @@ export function OpportunityStep({
               value={data.contractNumber}
               onChange={handleInputChange}
               placeholder="Ex: CNT-2026-001"
+              required
             />
           </FormField>
 

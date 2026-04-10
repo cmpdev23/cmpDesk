@@ -195,6 +195,7 @@ export function CaseStep({
           <FormField
             label="Sous-catégorie de transaction"
             htmlFor="transactionSubCategory"
+            required
             error={errors.transactionSubCategory}
           >
             <SelectField
@@ -205,6 +206,7 @@ export function CaseStep({
               options={filteredSubCategoryOptions}
               placeholder="Sélectionner une sous-catégorie..."
               disabled={!data.transactionCategory}
+              required
             />
           </FormField>
 
@@ -212,6 +214,7 @@ export function CaseStep({
           <FormField
             label="Type de signature"
             htmlFor="signatureType"
+            required
             error={errors.signatureType}
           >
             <SelectField
@@ -222,6 +225,7 @@ export function CaseStep({
               options={filteredSignatureTypeOptions}
               placeholder="Sélectionner un type..."
               disabled={!data.transactionSubCategory}
+              required
             />
           </FormField>
 
@@ -229,6 +233,7 @@ export function CaseStep({
           <FormField
             label="Type de produit"
             htmlFor="productType"
+            required
             error={errors.productType}
           >
             <SelectField
@@ -239,6 +244,7 @@ export function CaseStep({
               options={filteredProductTypeOptions}
               placeholder="Sélectionner un type..."
               disabled={!data.signatureType}
+              required
             />
           </FormField>
 
@@ -246,6 +252,7 @@ export function CaseStep({
           <FormField
             label="Lieu de résidence du client"
             htmlFor="customersPlaceOfResidence"
+            required
             error={errors.customersPlaceOfResidence}
           >
             <SelectField
@@ -255,6 +262,7 @@ export function CaseStep({
               onValueChange={handleSelectChange("customersPlaceOfResidence")}
               options={CUSTOMERS_PLACE_OF_RESIDENCE_OPTIONS}
               placeholder="Sélectionner un lieu..."
+              required
             />
           </FormField>
         </div>
