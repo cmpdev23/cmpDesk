@@ -148,25 +148,15 @@ export function OpportunityStep({
             />
           </FormField>
 
-          {/* ─── Date de transaction ───────────────────────────────────── */}
-          <FormField
-            label="Date de transaction"
-            htmlFor="transactionDate"
-            error={errors.transactionDate}
-          >
-            <InputField
-              id="transactionDate"
-              name="transactionDate"
-              type="date"
-              value={data.transactionDate}
-              onChange={handleInputChange}
-            />
-          </FormField>
-
-          {/* ─── Prime annuelle ─── hidden, valeur fixe 23 ─────────────── */}
-          {/* annualPremium is intentionally hidden — fixed default value: 23 */}
-
-          {/* ─── Numéro de proposition ─── hidden, mirrors contractNumber ─ */}
+          {/* ─── Hidden fields ─────────────────────────────────────────── */}
+          {/* transactionDate — always today's date */}
+          <input
+            type="hidden"
+            name="transactionDate"
+            value={data.transactionDate}
+          />
+          {/* annualPremium — fixed default value: 23 */}
+          {/* proposalNumber — mirrors contractNumber */}
           <input
             type="hidden"
             name="proposalNumber"
