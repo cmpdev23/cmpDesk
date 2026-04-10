@@ -652,6 +652,7 @@ app.on('before-quit', async (event) => {
 - **Don't use HTML CSP in Electron packaged apps** — `'self'` doesn't work with `file://` protocol in asar archives. Use `webPreferences` instead. (2026-04-08)
 - **Don't forget to track Playwright contexts** — Every `launchPersistentContext()` must be tracked for cleanup on app quit. (2026-04-08)
 - **Don't hardcode GitHub org in electron-builder publish config** — Owner must match actual repo (`cmpdev23` not `CMPlan`). Error 404 from GitHub API = wrong owner/repo or bad permissions. (2026-04-08)
+- **Don't rely on Playwright's bundled Chromium in packaged apps** — Use `executablePath` with system browser (Edge/Chrome) instead. Error "Executable doesn't exist at ms-playwright/chromium..." = bundled browser not installed. (2026-04-10)
 
 ---
 
@@ -912,3 +913,81 @@ if (ghReleaseToken) {
 | `.github/workflows/build.yml` | Same injection for consistency |
 | `electron/services/updater/index.js` | Configure `setFeedURL` with private token |
 | `.env.example` | Document `GH_RELEASE_TOKEN` variable |
+
+---
+
+## 🌐 Playwright Browser Strategy (2026-04-10)
+
+### Problem
+
+**Error in packaged app**:
+```
+browserType.launchPersistentContext: Executable doesn't exist at
+C:\Users\logan\AppData\Local\ms-playwright\chromium-1217\chrome-win64\chrome.exe
+```
+
+**Root Cause**: Playwright by default looks for its bundled Chromium browser in `ms-playwright/` folder. This browser is:
+- Downloaded via `npx playwright install` (devDependency)
+- NOT bundled in the packaged app (would add ~300MB)
+- NOT installed on end-user machines
+
+### Solution: Use System Browser
+
+Instead of Playwright's bundled Chromium, use the system browser (Edge or Chrome):
+
+1. **Microsoft Edge** (preferred): Pre-installed on Windows 10/11, always available
+2. **Google Chrome** (fallback): Common alternative if Edge is not found
+3. **Playwright Chromium** (last resort): Only works if manually installed
+
+### Implementation
+
+```javascript
+// electron/services/auth/browser.js
+
+const BROWSER_PATHS = {
+  msedge: [
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    `${process.env.LOCALAPPDATA}\\Microsoft\\Edge\\Application\\msedge.exe`,
+  ],
+  chrome: [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+  ],
+};
+
+function detectAvailableBrowser() {
+  for (const channel of ['msedge', 'chrome']) {
+    for (const browserPath of BROWSER_PATHS[channel]) {
+      if (fs.existsSync(browserPath)) {
+        return { channel, executablePath: browserPath };
+      }
+    }
+  }
+  return null; // Will try Playwright default (likely fails)
+}
+
+// In launchPersistentContext():
+const browser = detectAvailableBrowser();
+if (browser?.executablePath) {
+  launchOptions.executablePath = browser.executablePath;
+}
+```
+
+### Key Insights
+
+1. **Edge is always available on Windows 10/11**: Most reliable option for packaged apps
+2. **executablePath vs channel**: Using `executablePath` is more reliable than `channel` because it bypasses Playwright's browser detection
+3. **Chromium data folder compatibility**: Edge/Chrome use the same Chromium data folder format as Playwright's Chromium, so `launchPersistentContext` works with the same profile
+4. **Error message is important**: Provide clear French error message if no browser found, guiding user to solution
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `electron/services/auth/browser.js` | Added browser detection, executablePath usage, friendly error messages |
+
+### Anti-pattern Added
+
+- **Don't rely on Playwright's bundled Chromium in packaged apps**: Use `executablePath` with system browser (Edge/Chrome) instead. Bundled Chromium requires `npx playwright install` which end-users cannot run.
