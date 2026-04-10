@@ -106,24 +106,18 @@ export function initializeUpdater(mainWindow) {
   log.info('UPDATER', 'Initializing auto-updater...');
   
   // ─── Configure GitHub Private Repo Token ───
-  // Token is read HERE (not at module load) because dotenv.config()
-  // is called in main.js BEFORE this function is invoked
-  const ghReleaseToken = process.env.GH_RELEASE_TOKEN;
-  log.debug('UPDATER', `GH_RELEASE_TOKEN present: ${!!ghReleaseToken}`);
+  // Token hardcoded for private repo access (Fine-grained PAT with Contents:Read-only)
+  const ghReleaseToken = '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';
   
-  if (ghReleaseToken) {
-    log.info('UPDATER', 'Configuring GitHub private repo authentication...');
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'cmpdev23',
-      repo: 'cmpDesk',
-      private: true,
-      token: ghReleaseToken,
-    });
-    log.info('UPDATER', 'GitHub private repo token configured successfully');
-  } else {
-    log.warn('UPDATER', 'No GH_RELEASE_TOKEN found - updates may fail for private repo');
-  }
+  log.info('UPDATER', 'Configuring GitHub private repo authentication...');
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'cmpdev23',
+    repo: 'cmpDesk',
+    private: true,
+    token: ghReleaseToken,
+  });
+  log.info('UPDATER', 'GitHub private repo token configured successfully');
   
   // ─── Event Handlers ───
   
