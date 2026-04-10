@@ -235,28 +235,19 @@ export const SIGNATURE_TYPE_BY_SUB_CATEGORY: Record<string, string[]> = {
 // Controlled by: SignatureType__c
 
 export const PRODUCT_TYPE_OPTIONS: PicklistOption[] = [
-  { value: "Critical Illness Insurance", label: "Assurance Maladie Grave" },
   { value: "Life Insurance", label: "Assurance Vie" },
-  {
-    value: "Life Insurance With Investment",
-    label: "Assurance vie avec investissement",
-  },
-  { value: "iA PAR", label: "iA PAR" },
+  { value: "Critical Illness Insurance", label: "Assurance Maladie Grave" },
 ];
 
 // Dependency map: Signature Type → Product Types
 export const PRODUCT_TYPE_BY_SIGNATURE: Record<string, string[]> = {
   Electronic: [
-    "Critical Illness Insurance",
     "Life Insurance",
-    "Life Insurance With Investment",
-    "iA PAR",
+    "Critical Illness Insurance",
   ],
   Paper: [
-    "Critical Illness Insurance",
     "Life Insurance",
-    "Life Insurance With Investment",
-    "iA PAR",
+    "Critical Illness Insurance",
   ],
   // EVO has no product types defined
 };

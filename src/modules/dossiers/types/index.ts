@@ -112,8 +112,8 @@ export const DEFAULT_STEP2_DATA: CaseStep2Data = {
   transactionCategory: '',
   transactionSubCategory: '',
   signatureType: '',
-  productType: '',
-  customersPlaceOfResidence: '',
+  productType: 'Life Insurance', // default: Assurance Vie
+  customersPlaceOfResidence: 'Quebec', // default: Québec
 };
 
 export const DEFAULT_NOTES_DATA: NotesStepData = {
