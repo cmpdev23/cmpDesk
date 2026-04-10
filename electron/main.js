@@ -173,8 +173,56 @@ async function getAuthModule() {
     // For now, we'll implement the auth logic directly here
     // In production, this would import from compiled code
     
-    const { chromium } = await import('playwright');
+    const playwright = await import('playwright');
     const fs = await import('fs');
+    
+    // ========================================================================
+    // SYSTEM BROWSER DETECTION (Edge/Chrome instead of bundled Chromium)
+    // Playwright's bundled Chromium is NOT included in packaged apps.
+    // We detect and use the system browser (Edge preferred, Chrome fallback).
+    // ========================================================================
+    const SYSTEM_BROWSER_PATHS = {
+      msedge: [
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+        `${process.env.LOCALAPPDATA || ''}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      ],
+      chrome: [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        `${process.env.LOCALAPPDATA || ''}\\Google\\Chrome\\Application\\chrome.exe`,
+      ],
+    };
+    
+    let detectedBrowserPath = null;
+    for (const [browser, paths] of Object.entries(SYSTEM_BROWSER_PATHS)) {
+      for (const p of paths) {
+        if (p && fs.existsSync(p)) {
+          detectedBrowserPath = p;
+          log.info('AUTH', `System browser detected: ${browser} at ${p}`);
+          break;
+        }
+      }
+      if (detectedBrowserPath) break;
+    }
+    
+    if (!detectedBrowserPath) {
+      log.warn('AUTH', 'No system browser (Edge/Chrome) found! Playwright may fail in packaged app.');
+    }
+    
+    // Wrap chromium to auto-inject executablePath into every launchPersistentContext call
+    const originalChromium = playwright.chromium;
+    const chromium = {
+      ...originalChromium,
+      launchPersistentContext: (userDataDir, options = {}) => {
+        const patchedOptions = { ...options };
+        if (detectedBrowserPath && !patchedOptions.executablePath && !patchedOptions.channel) {
+          patchedOptions.executablePath = detectedBrowserPath;
+          log.debug('AUTH', `Using system browser: ${detectedBrowserPath}`);
+        }
+        return originalChromium.launchPersistentContext(userDataDir, patchedOptions);
+      },
+    };
     
     // Auth paths configuration
     const AUTH_DIR = path.join(app.getPath('userData'), 'auth');
