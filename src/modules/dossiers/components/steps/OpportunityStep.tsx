@@ -52,13 +52,13 @@ export function OpportunityStep({
   errors = {},
 }: OpportunityStepProps) {
   // Handler for shadcn Input (DOM ChangeEvent)
-  // Special mirror: proposalNumber → contractNumber (one-way only)
+  // Special mirror: contractNumber → proposalNumber (one-way sync)
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const updates: Partial<typeof data> = { [name]: value };
-    // Mirror proposal → contract (not the reverse)
-    if (name === 'proposalNumber') {
-      updates.contractNumber = value;
+    // Mirror contract → proposal (proposalNumber is hidden, mirrors contractNumber)
+    if (name === 'contractNumber') {
+      updates.proposalNumber = value;
     }
     onChange({ ...data, ...updates });
   };
@@ -133,21 +133,6 @@ export function OpportunityStep({
             />
           </FormField>
 
-          {/* ─── Numéro de proposition ─────────────────────────────────── */}
-          <FormField
-            label="Numéro de proposition"
-            htmlFor="proposalNumber"
-            error={errors.proposalNumber}
-          >
-            <InputField
-              id="proposalNumber"
-              name="proposalNumber"
-              value={data.proposalNumber}
-              onChange={handleInputChange}
-              placeholder="Ex: PROP-2026-001"
-            />
-          </FormField>
-
           {/* ─── Numéro de contrat ─────────────────────────────────────── */}
           <FormField
             label="Numéro de contrat"
@@ -180,6 +165,13 @@ export function OpportunityStep({
 
           {/* ─── Prime annuelle ─── hidden, valeur fixe 23 ─────────────── */}
           {/* annualPremium is intentionally hidden — fixed default value: 23 */}
+
+          {/* ─── Numéro de proposition ─── hidden, mirrors contractNumber ─ */}
+          <input
+            type="hidden"
+            name="proposalNumber"
+            value={data.contractNumber}
+          />
         </div>
       </CardContent>
     </Card>
