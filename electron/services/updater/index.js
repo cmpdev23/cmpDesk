@@ -74,22 +74,6 @@ autoUpdater.autoInstallOnAppQuit = true;   // Install when user quits app
 autoUpdater.allowDowngrade = false;        // Don't allow downgrade
 autoUpdater.allowPrerelease = false;       // Ignore pre-releases
 
-// Configure GitHub private repo token for update checks
-// This token is injected via .env during CI/CD build
-const ghReleaseToken = process.env.GH_RELEASE_TOKEN;
-if (ghReleaseToken) {
-  log.info('UPDATER', 'GitHub release token configured for private repo');
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'cmpdev23',
-    repo: 'cmpDesk',
-    private: true,
-    token: ghReleaseToken,
-  });
-} else {
-  log.warn('UPDATER', 'No GH_RELEASE_TOKEN found - updates may fail for private repo');
-}
-
 // Reference to main window for IPC
 let mainWindowRef = null;
 
@@ -120,6 +104,26 @@ export function initializeUpdater(mainWindow) {
   mainWindowRef = mainWindow;
   
   log.info('UPDATER', 'Initializing auto-updater...');
+  
+  // ─── Configure GitHub Private Repo Token ───
+  // Token is read HERE (not at module load) because dotenv.config()
+  // is called in main.js BEFORE this function is invoked
+  const ghReleaseToken = process.env.GH_RELEASE_TOKEN;
+  log.debug('UPDATER', `GH_RELEASE_TOKEN present: ${!!ghReleaseToken}`);
+  
+  if (ghReleaseToken) {
+    log.info('UPDATER', 'Configuring GitHub private repo authentication...');
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'cmpdev23',
+      repo: 'cmpDesk',
+      private: true,
+      token: ghReleaseToken,
+    });
+    log.info('UPDATER', 'GitHub private repo token configured successfully');
+  } else {
+    log.warn('UPDATER', 'No GH_RELEASE_TOKEN found - updates may fail for private repo');
+  }
   
   // ─── Event Handlers ───
   
