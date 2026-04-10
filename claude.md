@@ -652,7 +652,8 @@ app.on('before-quit', async (event) => {
 - **Don't use HTML CSP in Electron packaged apps** — `'self'` doesn't work with `file://` protocol in asar archives. Use `webPreferences` instead. (2026-04-08)
 - **Don't forget to track Playwright contexts** — Every `launchPersistentContext()` must be tracked for cleanup on app quit. (2026-04-08)
 - **Don't hardcode GitHub org in electron-builder publish config** — Owner must match actual repo (`cmpdev23` not `CMPlan`). Error 404 from GitHub API = wrong owner/repo or bad permissions. (2026-04-08)
-- **Don't rely on Playwright's bundled Chromium in packaged apps** — Use `executablePath` with system browser (Edge/Chrome) instead. Error "Executable doesn't exist at ms-playwright/chromium..." = bundled browser not installed. (2026-04-10)
+- **Don't rely on Playwright's bundled Chromium in packaged apps** — Use `executablePath` with system browser (Edge/Chrome) instead. Error "Executable doesn't exist at ms-playwright/chromium..." = bundled browser not installed. Fix must be in `electron/main.js` (line ~176, wrapping `chromium` after import), NOT in `electron/services/auth/browser.js` which is never called. (2026-04-10)
+- **ALL Playwright calls are in main.js, NOT in services/** — `electron/services/auth/browser.js` exists but is NOT used. The 9 `chromium.launchPersistentContext()` calls are all inline in `electron/main.js`. Modifying `browser.js` alone has ZERO effect. (2026-04-10)
 
 ---
 
