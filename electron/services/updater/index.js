@@ -74,6 +74,22 @@ autoUpdater.autoInstallOnAppQuit = true;   // Install when user quits app
 autoUpdater.allowDowngrade = false;        // Don't allow downgrade
 autoUpdater.allowPrerelease = false;       // Ignore pre-releases
 
+// Configure GitHub private repo token for update checks
+// This token is injected via .env during CI/CD build
+const ghReleaseToken = process.env.GH_RELEASE_TOKEN;
+if (ghReleaseToken) {
+  log.info('UPDATER', 'GitHub release token configured for private repo');
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'cmpdev23',
+    repo: 'cmpDesk',
+    private: true,
+    token: ghReleaseToken,
+  });
+} else {
+  log.warn('UPDATER', 'No GH_RELEASE_TOKEN found - updates may fail for private repo');
+}
+
 // Reference to main window for IPC
 let mainWindowRef = null;
 

@@ -38,7 +38,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
-      # 5. Create .env file from repository variables
+      # 5. Create .env file from repository variables and secrets
       - name: Create .env from repository variables
         run: |
           echo "# Auto-generated from GitHub repository variables" > .env
@@ -46,6 +46,7 @@ jobs:
           echo "DEBUG_LOGS=${{ vars.DEBUG_LOGS || 'false' }}" >> .env
           echo "SHOW_DEVTOOLS=${{ vars.SHOW_DEVTOOLS || 'false' }}" >> .env
           echo "LOG_LEVEL=${{ vars.LOG_LEVEL || 'warn' }}" >> .env
+          echo "GH_RELEASE_TOKEN=${{ secrets.GH_RELEASE_TOKEN }}" >> .env
         shell: bash
 
       # 6. Build frontend (Vite)
